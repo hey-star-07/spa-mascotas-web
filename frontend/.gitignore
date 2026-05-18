@@ -6,3 +6,5 @@ logs/
 *.log
 .DS_Store
 coverage/
+.env.local
+next-env.d.ts
