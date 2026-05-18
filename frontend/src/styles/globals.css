@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Baloo+2:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-foreground;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-cartoon;
+    background-image: radial-gradient(circle, #A8D5BA 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+}
+
+@layer components {
+  .cartoon-border {
+    @apply border-3 border-foreground shadow-cartoon;
+  }
+  
+  .cartoon-button {
+    @apply border-3 border-foreground shadow-cartoon 
+           font-bold rounded-xl px-6 py-3
+           hover:shadow-cartoon-hover hover:translate-x-[2px] hover:translate-y-[2px]
+           active:shadow-none active:translate-x-[4px] active:translate-y-[4px]
+           transition-all duration-100 cursor-pointer;
+  }
+  
+  .cartoon-input {
+    @apply border-3 border-foreground shadow-cartoon-sm
+           rounded-xl px-4 py-3 bg-white
+           focus:outline-none focus:ring-4 focus:ring-primary/50
+           transition-all;
+  }
+  
+  .cartoon-card {
+    @apply border-3 border-foreground shadow-cartoon
+           rounded-2xl bg-white p-6;
+  }
+}

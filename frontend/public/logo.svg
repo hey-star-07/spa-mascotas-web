@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Círculo de fondo -->
+  <circle cx="50" cy="50" r="48" fill="#A8D5BA" stroke="#2D2D2D" stroke-width="4"/>
+  
+  <!-- Huella de perro -->
+  <!-- Almohadilla principal -->
+  <ellipse cx="50" cy="58" rx="18" ry="14" fill="#2D2D2D"/>
+  
+  <!-- Dedos -->
+  <ellipse cx="32" cy="32" rx="7" ry="9" fill="#2D2D2D" transform="rotate(-15, 32, 32)"/>
+  <ellipse cx="50" cy="24" rx="7" ry="9" fill="#2D2D2D"/>
+  <ellipse cx="68" cy="32" rx="7" ry="9" fill="#2D2D2D" transform="rotate(15, 68, 32)"/>
+</svg>

@@ -1,0 +1,563 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum RolUsuario {
+  Admin
+  Recepcion
+  Groomer
+  Cliente
+}
+
+enum EstadoCita {
+  Agendada
+  Confirmada
+  EnProgreso
+  Completada
+  Cancelada
+  NoAsistio
+}
+
+enum EstadoPedido {
+  Pendiente
+  Enviado
+  Confirmado
+  Pagado
+  Entregado
+}
+
+enum EstadoFactura {
+  Pendiente
+  Pagada
+  Cancelada
+}
+
+enum EstadoPago {
+  Completado
+  Pendiente
+  Fallido
+}
+
+enum EstadoSolicitudCita {
+  Solicitada
+  EnRevision
+  Aprobada
+  Rechazada
+}
+
+enum MetodoPago {
+  Efectivo
+  QR
+  Transferencia
+}
+
+enum CanalNotificacion {
+  Email
+  WhatsApp
+  SMS
+}
+
+enum TipoEventoNotificacion {
+  CONFIRMACION
+  RECORDATORIO_24H
+  RECORDATORIO_2H
+  LISTO_RECOGER
+  ENCUESTA
+  PROMOCION
+}
+
+enum TipoBloqueo {
+  FERIADO
+  VACACIONES
+  MANTENIMIENTO
+  AUSENCIA
+}
+
+enum TemperamentoMascota {
+  Tranquilo
+  Jugueton
+  Agresivo
+  Timido
+  Indiferente
+}
+
+// ============================================
+// MODELOS PRINCIPALES
+// ============================================
+
+model Usuario {
+  id                Int       @id @default(autoincrement())
+  email             String    @unique
+  passwordHash      String    @map("password_hash")
+  nombre            String
+  apellido          String?
+  telefono          String?
+  rol               RolUsuario @default(Cliente)
+  
+  twoFactorSecret   String?   @map("two_factor_secret")
+  twoFactorEnabled  Boolean   @default(false) @map("two_factor_enabled")
+  
+  ultimoAcceso      DateTime? @map("ultimo_acceso")
+  activo            Boolean   @default(true)
+  loginAttempts     Int       @default(0) @map("login_attempts")
+  lockedUntil       DateTime? @map("locked_until")
+  emailVerificado   Boolean   @default(false) @map("email_verificado")
+  verificationToken String?   @map("verification_token")
+  codeExpiresAt     DateTime? @map("code_expires_at")
+
+  passwordTemporal     Boolean   @default(false) @map("password_temporal")  
+  fechaExpiracionPass  DateTime? @map("fecha_expiracion_pass")             
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  cliente           Cliente?
+  groomer           Groomer?
+  sesiones          SesionUsuario[]
+  notificaciones    Notificacion[]
+  citasCreadas      Cita[]            @relation("CitasCreadas")
+  citasReprogramadas Cita[]           @relation("CitasReprogramadas")
+  auditLogs         AuditLog[]
+  carritos          Carrito[]
+
+  @@map("usuarios")
+}
+
+model SesionUsuario {
+  id              Int      @id @default(autoincrement())
+  usuarioId       Int      @map("usuario_id")
+  tokenJwt        String   @map("token_jwt")
+  refreshToken    String   @map("refresh_token")
+  ipAddress       String?  @map("ip_address")
+  userAgent       String?  @map("user_agent")
+  fechaExpiracion DateTime @map("fecha_expiracion")
+  activa          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  usuario         Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("sesiones_usuario")
+}
+
+model Cliente {
+  id                       Int               @id @default(autoincrement())
+  usuarioId                Int               @unique @map("usuario_id")
+  direccionFisica          String?           @map("direccion_fisica")
+  canalNotificacionPreferido CanalNotificacion @default(Email) @map("canal_notificacion_preferido")
+  horarioPreferido         String?           @map("horario_preferido")
+  createdAt                DateTime          @default(now()) @map("created_at")
+  updatedAt                DateTime          @updatedAt @map("updated_at")
+
+  usuario                  Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  mascotas                 Mascota[]
+  pedidos                  Pedido[]
+  facturas                 Factura[]
+
+  @@map("clientes")
+}
+
+model Groomer {
+  id                    Int       @id @default(autoincrement())
+  usuarioId             Int       @unique @map("usuario_id")
+  capacidadSimultanea   Int       @default(1) @map("capacidad_simultanea")
+  especialidad          String?
+  horarioTrabajo        Json      @default("{}") @map("horario_trabajo")
+  activo                Boolean   @default(true)
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  usuario               Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  citas                 Cita[]
+  disponibilidades      Disponibilidad[]
+  bloqueosCalendario    BloqueoCalendario[]
+
+  @@map("groomers")
+}
+
+model Categoria {
+  id          Int         @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  padreId     Int?        @map("padre_id")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  padre       Categoria?  @relation("CategoriaPadre", fields: [padreId], references: [id], onDelete: SetNull)
+  hijos       Categoria[] @relation("CategoriaPadre")
+  productos   Producto[]
+
+  @@map("categorias")
+}
+
+model Producto {
+  id          Int               @id @default(autoincrement())
+  sku         String            @unique
+  nombre      String
+  descripcion String?
+  categoriaId Int?              @map("categoria_id")
+  precioBase  Decimal           @map("precio_base")
+  imagenUrl   String?           @map("imagen_url")
+  stockMinimo Int               @default(5) @map("stock_minimo")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  categoria   Categoria?        @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  variantes   VarianteProducto[]
+  consumoInsumos ConsumoInsumo[]
+  detalleCarritos DetalleCarrito[]
+
+  @@map("productos")
+}
+
+model VarianteProducto {
+  id             Int      @id @default(autoincrement())
+  productoId     Int      @map("producto_id")
+  atributo       String
+  valor          String
+  skuVariante    String   @unique @map("sku_variante")
+  precioExtra    Decimal  @default(0) @map("precio_extra")
+  stockAdicional Int      @default(0) @map("stock_adicional")
+
+  producto       Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  consumoInsumos ConsumoInsumo[]
+  detalleCarritos DetalleCarrito[]
+
+  @@unique([productoId, atributo, valor])
+  @@map("variantes_producto")
+}
+
+model Servicio {
+  id                        Int       @id @default(autoincrement())
+  nombre                    String
+  descripcion               String?
+  duracionBaseMinutos       Int       @map("duracion_base_minutos")
+  precioBase                Decimal   @map("precio_base")
+  permiteDobleBooking       Boolean   @default(false) @map("permite_doble_booking")
+  factorTamanoRaza          Decimal   @default(0.15) @map("factor_tamano_raza")
+  requiereBloqueConsecutivo Boolean   @default(false) @map("requiere_bloque_consecutivo")
+  activo                    Boolean   @default(true)
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+
+  citas                     Cita[]
+  plantillaChecklist        PlantillaChecklist[]
+
+  @@map("servicios")
+}
+
+model Mascota {
+  id                          Int                  @id @default(autoincrement())
+  clienteId                   Int                  @map("cliente_id")
+  nombre                      String
+  especie                     String               @default("Canino")
+  raza                        String?
+  tamanio                     String?              @map("tamanio") 
+  fechaNacimiento             DateTime?            @map("fecha_nacimiento")
+  pesoKg                      Decimal?             @map("peso_kg")
+  temperamento                TemperamentoMascota?
+  alergiasConocidas           String?              @map("alergias_conocidas")
+  restriccionesMedicas        String?              @map("restricciones_medicas_comportamiento")
+  createdAt                   DateTime             @default(now()) @map("created_at")
+  updatedAt                   DateTime             @updatedAt @map("updated_at")
+
+  cliente                     Cliente              @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  vacunas                     Vacuna[]
+  citas                       Cita[]
+
+  @@map("mascotas")
+}
+
+model Vacuna {
+  id                Int       @id @default(autoincrement())
+  mascotaId         Int       @map("mascota_id")
+  nombre            String
+  fechaAplicacion   DateTime  @map("fecha_aplicacion")
+  fechaVencimiento  DateTime? @map("fecha_vencimiento")
+  lote              String?
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  mascota           Mascota   @relation(fields: [mascotaId], references: [id], onDelete: Cascade)
+
+  @@map("vacunas")
+}
+
+model Cita {
+  id                      Int        @id @default(autoincrement())
+  mascotaId               Int        @map("mascota_id")
+  groomerId               Int        @map("groomer_id")
+  servicioId              Int        @map("servicio_id")
+  fechaHoraInicio         DateTime   @map("fecha_hora_inicio")
+  fechaHoraFin            DateTime   @map("fecha_hora_fin")
+  estado                  EstadoCita @default(Agendada)
+  estadoSolicitud         EstadoSolicitudCita? @map("estado_solicitud")
+  creadoPorId             Int?       @map("creado_por")
+  reprogramadoPorId       Int?       @map("reprogramado_por")
+  fechaReprogramacion     DateTime?  @map("fecha_reprogramacion")
+  duracionEstimadaMinutos Int        @map("duracion_estimada_minutos")
+  duracionRealMinutos     Int?       @map("duracion_real_minutos")
+  createdAt               DateTime   @default(now()) @map("created_at")
+  updatedAt               DateTime   @updatedAt @map("updated_at")
+
+  mascota                 Mascota    @relation(fields: [mascotaId], references: [id], onDelete: Restrict)
+  groomer                 Groomer    @relation(fields: [groomerId], references: [id], onDelete: Restrict)
+  servicio                Servicio   @relation(fields: [servicioId], references: [id], onDelete: Restrict)
+  creadoPor               Usuario?   @relation("CitasCreadas", fields: [creadoPorId], references: [id])
+  reprogramadoPor         Usuario?   @relation("CitasReprogramadas", fields: [reprogramadoPorId], references: [id])
+  fichaGrooming           FichaGrooming?
+  factura                 Factura?
+
+  @@map("citas")
+}
+
+model FichaGrooming {
+  id                  Int               @id @default(autoincrement())
+  citaId              Int               @unique @map("cita_id")
+  razaTamanoMomento   String?           @map("raza_tamano_momento")
+  temperaturaAnimal   Decimal?          @map("temperatura_animal")
+  notasInternas       String?           @map("notas_internas")
+  consumidoInventario Boolean           @default(false) @map("consumido_inventario")
+  fechaCierre         DateTime?         @map("fecha_cierre")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  cita                Cita              @relation(fields: [citaId], references: [id], onDelete: Restrict)
+  fotos               Foto[]
+  checklist           ChecklistFicha[]
+  consumoInsumos      ConsumoInsumo[]
+
+  @@map("fichas_grooming")
+}
+
+model Foto {
+  id               Int      @id @default(autoincrement())
+  fichaGroomingId  Int      @map("ficha_grooming_id")
+  tipo             String
+  urlFoto          String   @map("url_foto")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  fichaGrooming    FichaGrooming @relation(fields: [fichaGroomingId], references: [id], onDelete: Cascade)
+
+  @@map("fotos")
+}
+
+model PlantillaChecklist {
+  id                   Int                @id @default(autoincrement())
+  servicioId           Int                @map("servicio_id")
+  item                 String
+  descripcion          String?
+  requiereObservacion  Boolean            @default(false) @map("requiere_observacion")
+  orden                Int                @default(0)
+  
+  servicio             Servicio           @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  checklistFicha       ChecklistFicha[]
+
+  @@unique([servicioId, item])
+  @@map("plantillas_checklist")
+}
+
+model ChecklistFicha {
+  id                    Int                @id @default(autoincrement())
+  fichaGroomingId       Int                @map("ficha_grooming_id")
+  plantillaChecklistId  Int                @map("plantilla_checklist_id")
+  completado            Boolean            @default(false)
+  observacion           String?
+  createdAt             DateTime           @default(now()) @map("created_at")
+
+  fichaGrooming         FichaGrooming      @relation(fields: [fichaGroomingId], references: [id], onDelete: Cascade)
+  plantillaChecklist    PlantillaChecklist @relation(fields: [plantillaChecklistId], references: [id], onDelete: Restrict)
+
+  @@unique([fichaGroomingId, plantillaChecklistId])
+  @@map("checklist_ficha")
+}
+
+model ConsumoInsumo {
+  id               Int      @id @default(autoincrement())
+  fichaGroomingId  Int      @map("ficha_grooming_id")
+  productoId       Int      @map("producto_id")
+  varianteId       Int?     @map("variante_id")
+  cantidad         Decimal
+  merma            Boolean           @default(false) @map("merma")           
+  devuelto         Boolean           @default(false) @map("devuelto")        
+  cantidadDevuelta Decimal?          @map("cantidad_devuelta")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  fichaGrooming    FichaGrooming @relation(fields: [fichaGroomingId], references: [id], onDelete: Cascade)
+  producto         Producto      @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  variante         VarianteProducto? @relation(fields: [varianteId], references: [id], onDelete: SetNull)
+
+  @@map("consumo_insumos")
+}
+
+model Carrito {
+  id           Int       @id @default(autoincrement())
+  usuarioId    Int?      @map("usuario_id")
+  sessionToken String?   @unique @map("session_token")
+  expiresAt    DateTime  @default(now()) @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  usuario      Usuario?  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  detalles     DetalleCarrito[]
+  pedido       Pedido?
+
+  @@map("carritos")
+}
+
+model DetalleCarrito {
+  id             Int               @id @default(autoincrement())
+  carritoId      Int               @map("carrito_id")
+  productoId     Int               @map("producto_id")
+  varianteId     Int?              @map("variante_id")
+  cantidad       Int
+  precioUnitario Decimal           @map("precio_unitario")
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  carrito        Carrito           @relation(fields: [carritoId], references: [id], onDelete: Cascade)
+  producto       Producto          @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  variante       VarianteProducto? @relation(fields: [varianteId], references: [id], onDelete: SetNull)
+
+  @@map("detalles_carrito")
+}
+
+model Pedido {
+  id               Int          @id @default(autoincrement())
+  clienteId        Int          @map("cliente_id")
+  carritoId        Int?         @unique @map("carrito_id")
+  fechaPedido      DateTime     @default(now()) @map("fecha_pedido")
+  subtotal         Decimal
+  descuento        Decimal      @default(0)
+  total            Decimal
+  estado           EstadoPedido @default(Pendiente)
+  metodoContacto   String       @map("metodo_contacto")
+  contactoDestino  String       @map("contacto_destino")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  cliente          Cliente      @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  carrito          Carrito?     @relation(fields: [carritoId], references: [id], onDelete: SetNull)
+  factura          Factura?
+
+  @@map("pedidos")
+}
+
+model Factura {
+  id              Int           @id @default(autoincrement())
+  citaId          Int?          @unique @map("cita_id")
+  pedidoId        Int?          @unique @map("pedido_id")
+  numeroFactura   String        @unique @map("numero_factura")
+  fechaEmision    DateTime      @default(now()) @map("fecha_emision")
+  clienteId       Int           @map("cliente_id")
+  subtotal        Decimal
+  impuesto        Decimal       @default(0)
+  total           Decimal
+  estado          EstadoFactura @default(Pendiente)
+  metodoPago      MetodoPago?   @map("metodo_pago")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  cita            Cita?         @relation(fields: [citaId], references: [id], onDelete: SetNull)
+  pedido          Pedido?       @relation(fields: [pedidoId], references: [id], onDelete: SetNull)
+  cliente         Cliente       @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  detalles        DetalleFactura[]
+  pagos           Pago[]
+
+  @@map("facturas")
+}
+
+model DetalleFactura {
+  id             Int      @id @default(autoincrement())
+  facturaId      Int      @map("factura_id")
+  concepto       String
+  cantidad       Int
+  precioUnitario Decimal  @map("precio_unitario")
+  total          Decimal
+
+  factura        Factura  @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+
+  @@map("detalles_factura")
+}
+
+model Pago {
+  id                    Int        @id @default(autoincrement())
+  facturaId             Int        @map("factura_id")
+  monto                 Decimal
+  metodoPago            MetodoPago @map("metodo_pago")
+  referenciaTransaccion String?    @map("referencia_transaccion")
+  estado                EstadoPago @default(Completado)
+  fechaPago             DateTime   @default(now()) @map("fecha_pago")
+
+  factura               Factura    @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+
+  @@map("pagos")
+}
+
+model Disponibilidad {
+  id                 Int      @id @default(autoincrement())
+  groomerId          Int      @map("groomer_id")
+  diaSemana          Int      @map("dia_semana")
+  horaInicio         String   @map("hora_inicio")
+  horaFin            String   @map("hora_fin")
+  intervaloDescanso  Json?    @map("intervalo_descanso")
+
+  groomer            Groomer  @relation(fields: [groomerId], references: [id], onDelete: Cascade)
+
+  @@map("disponibilidad")
+}
+
+model BloqueoCalendario {
+  id          Int         @id @default(autoincrement())
+  groomerId   Int?        @map("groomer_id")
+  tipo        TipoBloqueo
+  fechaInicio DateTime    @map("fecha_inicio")
+  fechaFin    DateTime    @map("fecha_fin")
+  descripcion String?
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  groomer     Groomer?    @relation(fields: [groomerId], references: [id], onDelete: Cascade)
+
+  @@map("bloqueos_calendario")
+}
+
+model Notificacion {
+  id                 Int                    @id @default(autoincrement())
+  usuarioId          Int                    @map("usuario_id")
+  tipoEvento         TipoEventoNotificacion @map("tipo_evento")
+  canal              CanalNotificacion
+  destino            String
+  contenido          String?
+  fechaProgramacion  DateTime               @map("fecha_programacion")
+  fechaEnvio         DateTime?              @map("fecha_envio")
+  estadoEnvio        String                 @default("pendiente") @map("estado_envio")
+  reintentos         Int                    @default(0)
+  logEntregas        Json?                  @map("log_entregas")
+  createdAt          DateTime               @default(now()) @map("created_at")
+
+  usuario            Usuario                @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("notificaciones")
+}
+
+model AuditLog {
+  id             Int      @id @default(autoincrement())
+  tablaAfectada  String   @map("tabla_afectada")
+  registroId     Int?     @map("registro_id")
+  accion         String
+  usuarioId      Int?     @map("usuario_id")
+  datosAntiguos  Json?    @map("datos_antiguos")
+  datosNuevos    Json?    @map("datos_nuevos")
+  ipAddress      String?  @map("ip_address")
+  userAgent      String?  @map("user_agent")
+  fechaAccion    DateTime @default(now()) @map("fecha_accion")
+
+  usuario        Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
