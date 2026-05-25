@@ -10,6 +10,7 @@ export interface UserProfile {
   twoFactorEnabled: boolean;
   ultimoAcceso: string | null;
   createdAt: string;
+  avatarUrl?: string | null;
 }
 
 export interface UserListResponse {

@@ -207,6 +207,7 @@ model Producto {
   precioBase  Decimal           @map("precio_base")
   imagenUrl   String?           @map("imagen_url")
   stockMinimo Int               @default(5) @map("stock_minimo")
+  activo      Boolean           @default(true) @map("activo")
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
 
@@ -268,6 +269,8 @@ model Mascota {
   restriccionesMedicas        String?              @map("restricciones_medicas_comportamiento")
   createdAt                   DateTime             @default(now()) @map("created_at")
   updatedAt                   DateTime             @updatedAt @map("updated_at")
+  imagen                      String?              @map("imagen")
+  carnetVacunas               String?              @map("carnet_vacunas")
 
   cliente                     Cliente              @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   vacunas                     Vacuna[]
@@ -328,6 +331,9 @@ model FichaGrooming {
   fechaCierre         DateTime?         @map("fecha_cierre")
   createdAt           DateTime          @default(now()) @map("created_at")
   updatedAt           DateTime          @updatedAt @map("updated_at")
+  estadoIngreso       String?           @map("estado_ingreso")      
+  comportamiento      String?           @map("comportamiento")      
+  recomendaciones     String?           @map("recomendaciones")
 
   cita                Cita              @relation(fields: [citaId], references: [id], onDelete: Restrict)
   fotos               Foto[]

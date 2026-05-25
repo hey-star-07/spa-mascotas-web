@@ -6,6 +6,9 @@ import { logger } from '../../config/logger';
 import prisma from '../../config/database';
 import { OAuth2Client } from 'google-auth-library';
 import { TokenUtils } from '../../shared/utils/tokens';
+import { AppError } from '../../shared/errors/AppError';
+import { ErrorCodes } from '../../shared/errors/errorCodes';
+import { TOTPUtils } from '../../shared/utils/totp';
 
 
 export class AuthController {
@@ -540,32 +543,77 @@ export class AuthController {
 
       if (usuario) {
         // ============================================
-        // USUARIO YA EXISTE - LOGIN DIRECTO
+        // USUARIO YA EXISTE
         // ============================================
         
-        // Si es Admin/Recepcion/Groomer y no tiene 2FA → obligar
-        if (
-          (usuario.rol === 'Admin' || usuario.rol === 'Recepcion' || usuario.rol === 'Groomer') &&
-          !usuario.twoFactorEnabled
-        ) {
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+
+        // Verificar si está activo
+        if (!usuario.activo) {
+          res.redirect(`${frontendUrl}/login?error=account_inactive`);
+          return;
+        }
+
+        // 🔐 VERIFICAR CONTRASEÑA TEMPORAL (3 DÍAS)
+        if (usuario.passwordTemporal && usuario.fechaExpiracionPass) {
+          if (new Date() > usuario.fechaExpiracionPass) {
+            await prisma.usuario.update({
+              where: { id: usuario.id },
+              data: { activo: false },
+            });
+            res.redirect(`${frontendUrl}/login?error=account_expired`);
+            return;
+          }
+
           const tempToken = TokenUtils.generateAccessToken({
             userId: usuario.id,
             email: usuario.email,
             rol: usuario.rol,
           });
 
-          res.redirect(
-            `${process.env.FRONTEND_URL || 'http://localhost:3001'}/setup-2fa?token=${tempToken}`
-          );
+          res.redirect(`${frontendUrl}/change-password-required?token=${tempToken}`);
           return;
         }
 
-        // Login normal
-        const tokenPayload = { userId: usuario.id, email: usuario.email, rol: usuario.rol };
+        // 🔐 VERIFICAR 2FA PARA ADMIN/RECEPCION/GROOMER
+        if (
+          usuario.rol === 'Admin' || 
+          usuario.rol === 'Recepcion' || 
+          usuario.rol === 'Groomer'
+        ) {
+          if (!usuario.twoFactorEnabled) {
+            // No tiene 2FA → OBLIGAR a configurar
+            const tempToken = TokenUtils.generateAccessToken({
+              userId: usuario.id,
+              email: usuario.email,
+              rol: usuario.rol,
+            });
+
+            res.redirect(`${frontendUrl}/setup-2fa?token=${tempToken}`);
+            return;
+          }
+
+          // Tiene 2FA → Redirigir a página de verificación 2FA
+          const tempToken = TokenUtils.generateAccessToken({
+            userId: usuario.id,
+            email: usuario.email,
+            rol: usuario.rol,
+          });
+
+          res.redirect(`${frontendUrl}/verify-2fa?token=${tempToken}&from=google`);
+          return;
+        }
+
+        // Cliente (sin 2FA) → Login directo
+        const tokenPayload = { 
+          userId: usuario.id, 
+          email: usuario.email, 
+          rol: usuario.rol 
+        };
         const accessToken = TokenUtils.generateAccessToken(tokenPayload);
         const refreshToken = TokenUtils.generateRefreshToken(tokenPayload);
 
-        await prisma.sesionUsuario.create({
+        const session = await prisma.sesionUsuario.create({
           data: {
             usuarioId: usuario.id,
             tokenJwt: accessToken,
@@ -578,10 +626,9 @@ export class AuthController {
 
         const accessTokenWithSession = TokenUtils.generateAccessToken({
           ...tokenPayload,
-          sessionId: (await prisma.sesionUsuario.findFirst({ where: { tokenJwt: accessToken }, orderBy: { createdAt: 'desc' } }))?.id,
+          sessionId: session.id,
         });
 
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
         res.redirect(
           `${frontendUrl}/google-callback?accessToken=${accessTokenWithSession}&refreshToken=${refreshToken}`
         );
@@ -697,6 +744,78 @@ export class AuthController {
             rol: usuario.rol,
           },
           accessToken,
+          refreshToken,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/auth/verify-2fa-token
+   * Verificar 2FA con token temporal (para Google OAuth)
+   */
+  static async verify2FAToken(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { token, code } = req.body;
+
+      // Verificar el token temporal
+      const decoded = TokenUtils.verifyAccessToken(token);
+      const usuario = await prisma.usuario.findUnique({ where: { id: decoded.userId } });
+
+      if (!usuario) {
+        throw new AppError(ErrorCodes.USER_NOT_FOUND, 404);
+      }
+
+      // Verificar código 2FA
+      if (!usuario.twoFactorSecret) {
+        throw new AppError(ErrorCodes.INVALID_2FA_CODE, 400, '2FA no configurado');
+      }
+
+      const isValid = TOTPUtils.verifyToken(usuario.twoFactorSecret, code);
+      if (!isValid) {
+        throw new AppError(ErrorCodes.INVALID_2FA_CODE, 401);
+      }
+
+      // Generar tokens finales
+      const tokenPayload = { userId: usuario.id, email: usuario.email, rol: usuario.rol };
+      const accessToken = TokenUtils.generateAccessToken(tokenPayload);
+      const refreshToken = TokenUtils.generateRefreshToken(tokenPayload);
+
+      const session = await prisma.sesionUsuario.create({
+        data: {
+          usuarioId: usuario.id,
+          tokenJwt: accessToken,
+          refreshToken,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          fechaExpiracion: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      const accessTokenWithSession = TokenUtils.generateAccessToken({
+        ...tokenPayload,
+        sessionId: session.id,
+      });
+
+      // Actualizar último acceso
+      await prisma.usuario.update({
+        where: { id: usuario.id },
+        data: { ultimoAcceso: new Date(), loginAttempts: 0, lockedUntil: null },
+      });
+
+      res.status(200).json({
+        status: 'success',
+        data: {
+          user: {
+            id: usuario.id,
+            email: usuario.email,
+            nombre: usuario.nombre,
+            apellido: usuario.apellido || undefined,
+            rol: usuario.rol,
+          },
+          accessToken: accessTokenWithSession,
           refreshToken,
         },
       });

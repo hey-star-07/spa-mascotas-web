@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/shared/error-state";
 import { UserProfile } from "@/types/user.types";
 import { formatDate } from "@/lib/utils";
+import { ImageUpload } from "@/components/shared/image-upload";
 import { Mail, Phone, Shield, Clock, KeyRound, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
@@ -107,6 +108,15 @@ export default function ProfilePage() {
               <Badge variant="info">{profile.rol}</Badge>
             </div>
           </div>
+          <ImageUpload
+            label="Cambiar avatar"
+            currentImage={profile.avatarUrl ?? undefined}
+            onUpload={async (url) => {
+              await api.put('/users/profile', { avatarUrl: url });
+              toast.success('Avatar actualizado');
+              loadProfile();
+            }}
+          />
           <div className="grid gap-3">
             <div className="flex items-center gap-2 text-base font-semibold"><Mail className="h-5 w-5" />{profile.email}</div>
             {profile.telefono && <div className="flex items-center gap-2 text-base font-semibold"><Phone className="h-5 w-5" />{profile.telefono}</div>}

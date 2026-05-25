@@ -23,6 +23,7 @@ export interface UserResponse {
   twoFactorEnabled: boolean;
   ultimoAcceso: Date | null;
   createdAt: Date;
+  avatarUrl?: string | null; 
 }
 
 export interface UserListResponse {

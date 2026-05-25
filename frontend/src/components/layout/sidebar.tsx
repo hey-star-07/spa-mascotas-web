@@ -7,6 +7,12 @@ import { useUIStore } from "@/store/ui-store";
 import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Scissors, Calendar } from "lucide-react";
+import { PawPrint } from "lucide-react";
+import { CalendarPlus, XCircle } from "lucide-react";
+import { ClipboardList } from "lucide-react";
+import { Box } from "lucide-react";
+import { Receipt } from "lucide-react";
 import {
   LayoutDashboard,
   User,
@@ -20,9 +26,18 @@ import {
 const menuItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["Admin", "Recepcion", "Groomer", "Cliente"] },
   { href: "/profile", label: "Mi Perfil", icon: User, roles: ["Admin", "Recepcion", "Groomer", "Cliente"] },
-  { href: "/users", label: "Gestionar Personal", icon: UserPlus, roles: ["Admin"] },
-  { href: "/audit-logs", label: "Auditoría", icon: ScrollText, roles: ["Admin"] },  // 👈 NUEVO
+  { href: "/my-pets", label: "Mis Mascotas", icon: PawPrint, roles: ["Cliente"] },
+  { href: "/users", label: "Gestionar Personal", icon: UserPlus, roles: ["Admin"] },  
+  { href: "/services", label: "Servicios", icon: Scissors, roles: ["Admin"] },
+  { href: "/availability", label: "Disponibilidad", icon: Calendar, roles: ["Admin", "Recepcion"] },
+  { href: "/appointments", label: "Citas", icon: Calendar, roles: ["Admin", "Recepcion"]},
+  { href: "/my-appointments", label: "Mis Citas", icon: Calendar, roles: ["Cliente"] },
+  { href: "/groomer-dashboard", label: "Mi Agenda", icon: Calendar, roles: ["Groomer"] },
+  { href: "/grooming", label: "Fichas Técnicas", icon: ClipboardList, roles: ["Groomer"] },
+  { href: "/inventory", label: "Inventario", icon: Box, roles: ["Admin", "Recepcion"] },
+  { href: "/billing", label: "Facturación", icon: Receipt, roles: ["Admin", "Recepcion", "Cliente"] },
   { href: "/settings", label: "Configuración", icon: Settings, roles: ["Admin", "Recepcion", "Groomer", "Cliente"] },
+  { href: "/audit-logs", label: "Auditoría", icon: ScrollText, roles: ["Admin"] },
 ];
 
 export function Sidebar() {

@@ -13,19 +13,18 @@ export class UsersService {
     page: number = 1,
     limit: number = 10,
     filters?: {
-      rol?: RolUsuario;
-      activo?: boolean;
+      rol?: string;           
+      activo?: string | boolean;  
       search?: string;
     }
   ): Promise<UserListResponse> {
     const where: Prisma.UsuarioWhereInput = {};
-
     if (filters?.rol) {
-      where.rol = filters.rol;
+      where.rol = filters.rol as RolUsuario;
     }
 
     if (filters?.activo !== undefined) {
-      where.activo = filters.activo;
+      where.activo = filters.activo === 'true' || filters.activo === true;
     }
 
     if (filters?.search) {

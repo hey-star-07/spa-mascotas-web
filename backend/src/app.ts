@@ -2,12 +2,23 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import path from 'path';
 import { rateLimiter } from './shared/middleware/rateLimiter';
 import { errorHandler } from './shared/errors/errorHandler';
 import authRoutes from './modules/auth/auth.routes';
-import usersRoutes from './modules/users/users.routes'; // 👈 Nueva importación
+import usersRoutes from './modules/users/users.routes'; 
+import servicesRoutes from './modules/services/services.routes';
+import availabilityRoutes from './modules/availability/availability.routes';
+import petsRoutes from './modules/pets/pets.routes';
+import groomingRoutes from './modules/grooming/grooming.routes';
+import inventoryRoutes from './modules/inventory/inventory.routes';
+import billingRoutes from './modules/billing/billing.routes';
+import uploadRoutes from './modules/upload/upload.routes';
+import notificationsRoutes from './modules/notifications/notifications.routes';
 import auditLogsRoutes from './modules/audit-logs/audit-logs.routes';
+import appointmentsRoutes from './modules/appointments/appointments.routes';
 import { logger } from './config/logger';
+
 
 const app: Application = express();
 
@@ -38,6 +49,7 @@ app.use(morgan('combined', {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // ============================================
 // RUTAS
 // ============================================
@@ -56,8 +68,17 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 
 // Módulo de Usuarios
-app.use('/api/users', usersRoutes); // 👈 Nueva ruta
+app.use('/api/users', usersRoutes);
+app.use('/api/services', servicesRoutes);
+app.use('/api/availability', availabilityRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);
+app.use('/api/pets', petsRoutes);
+app.use('/api/appointments', appointmentsRoutes);
+app.use('/api/grooming', groomingRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/notifications', notificationsRoutes);
 // ============================================
 // MANEJO DE ERRORES
 // ============================================

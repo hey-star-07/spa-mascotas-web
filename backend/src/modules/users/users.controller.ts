@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { UsersService } from './users.service';
 import { logger } from '../../config/logger';
+import prisma from '../../config/database';
 
 export class UsersController {
   /**
@@ -196,6 +197,56 @@ export class UsersController {
       res.status(200).json({
         status: 'success',
         ...result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+    /**
+   * GET /api/users/groomers
+   * Obtener lista de groomers activos (público para recepción)
+   */
+  static async getGroomers(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const groomers = await prisma.usuario.findMany({
+        where: { rol: 'Groomer', activo: true },
+        select: {
+          id: true,           // ID del usuario
+          email: true,
+          nombre: true,
+          apellido: true,
+          telefono: true,
+          groomer: {
+            select: {
+              id: true,       // ID del groomer (para disponibilidad)
+              especialidad: true,
+              capacidadSimultanea: true,
+            },
+          },
+        },
+        orderBy: { nombre: 'asc' },
+      });
+
+      // Si el usuario es groomer pero no tiene registro en la tabla groomers, crear uno
+      const result = await Promise.all(groomers.map(async (u) => {
+        if (!u.groomer) {
+          // Crear registro en tabla groomers si no existe
+          const newGroomer = await prisma.groomer.create({
+            data: {
+              usuarioId: u.id,
+              horarioTrabajo: {},
+            },
+            select: { id: true, especialidad: true, capacidadSimultanea: true },
+          });
+          return { ...u, groomer: newGroomer };
+        }
+        return u;
+      }));
+
+      res.status(200).json({
+        status: 'success',
+        data: result,
       });
     } catch (error) {
       next(error);

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { UsersController } from './users.controller';
 import { authenticate } from '../../shared/middleware/authenticate';
-import { adminOnly, adminOrOwner, staffOnly } from '../../shared/middleware/authorize';
+import { adminOnly, adminOrOwner, authorize, staffOnly } from '../../shared/middleware/authorize';
 import { validate } from '../../shared/middleware/validate';
 import {
   updateUserSchema,
@@ -12,6 +12,27 @@ import {
 import { auditLog } from '../../shared/middleware/auditLogger';
 
 const router = Router();
+
+
+// ============================================
+// RUTAS DE STAFF (Admin, Recepcion, Groomer)
+// ============================================
+// Obtener groomers activos (accesible para Admin, Recepcion, Cliente)
+router.get(
+  '/groomers',
+  authenticate,
+  authorize('Admin', 'Recepcion', 'Cliente'),
+  UsersController.getGroomers
+);
+
+// Estadísticas de usuarios
+router.get(
+  '/stats',
+  authenticate,
+  adminOnly,
+  UsersController.getUserStats
+);
+
 
 // ============================================
 // RUTAS PROTEGIDAS (requieren autenticación)
@@ -26,8 +47,17 @@ router.put(
 );
 
 // ============================================
-// RUTAS DE STAFF (Admin, Recepcion, Groomer)
+// RUTAS DE ADMIN
 // ============================================
+
+// Listar usuarios (paginado, filtrado)
+router.get(
+  '/',
+  authenticate,
+  adminOnly,
+  validate(userListQuerySchema),
+  UsersController.getUsers
+);
 
 // Buscar usuarios (útil para recepción)
 router.get(
@@ -44,27 +74,6 @@ router.get(
   adminOrOwner,
   validate(userIdParamsSchema),
   UsersController.getUserById
-);
-
-// ============================================
-// RUTAS DE ADMIN
-// ============================================
-
-// Listar usuarios (paginado, filtrado)
-router.get(
-  '/',
-  authenticate,
-  adminOnly,
-  validate(userListQuerySchema),
-  UsersController.getUsers
-);
-
-// Estadísticas de usuarios
-router.get(
-  '/stats',
-  authenticate,
-  adminOnly,
-  UsersController.getUserStats
 );
 
 // Actualizar usuario como Admin
@@ -106,5 +115,6 @@ router.delete(
   auditLog('DELETE', 'usuarios'),
   UsersController.deleteUser
 );
+
 
 export default router;

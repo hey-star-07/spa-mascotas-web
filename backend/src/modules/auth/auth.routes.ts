@@ -158,7 +158,10 @@ router.post(
   '/register/google',
   AuthController.registerGoogleClient
 );
+
 // Google OAuth
 router.get('/google', AuthController.googleAuth);
 router.get('/google/callback', AuthController.googleCallback);
+// Verificar 2FA con token temporal (Google OAuth)
+router.post('/verify-2fa-token', AuthController.verify2FAToken);
 export default router;
