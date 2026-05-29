@@ -30,9 +30,11 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('accessToken');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    console.log('🔑 Token enviado:', token ? token.substring(0, 20) + '...' : 'NO HAY TOKEN'); // DEBUG
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
-  resetInactivityTimer();
   return config;
 });
 
@@ -41,22 +43,15 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // 👇 NO REDIRIGIR SI ES UN 401 DE LOGIN (el usuario está intentando loguearse)
-    if (error.response?.status === 401 && originalRequest.url?.includes('/auth/login')) {
-      return Promise.reject(error);
-    }
-
-    // 👇 NO REDIRIGIR SI YA INTENTÓ REFRESCAR
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Si es 401 y NO es login, intentar refrescar token
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/login')) {
       originalRequest._retry = true;
 
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (!refreshToken) throw new Error('No refresh token');
 
-        const { data } = await axios.post(`${API_URL}/auth/refresh-token`, {
-          refreshToken,
-        });
+        const { data } = await axios.post(`${API_URL}/auth/refresh-token`, { refreshToken });
 
         localStorage.setItem('accessToken', data.data.accessToken);
         localStorage.setItem('refreshToken', data.data.refreshToken);
@@ -64,12 +59,10 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${data.data.accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
+        // Solo redirigir si NO está en la página de login
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        
-        // Solo redirigir si NO está en la página de login
-        if (!window.location.pathname.includes('/login')) {
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
           window.location.href = '/login?expired=true';
         }
         return Promise.reject(refreshError);

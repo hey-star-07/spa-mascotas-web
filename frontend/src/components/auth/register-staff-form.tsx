@@ -26,6 +26,7 @@ const registerUserSchema = z.object({
   }),
   especialidad: z.string().optional(),
   turno: z.enum(["Mañana", "Tarde", "Completo"]).optional(),
+  capacidadDiaria: z.number().int().min(1).max(20).optional(),
 });
 
 type RegisterUserFormData = z.infer<typeof registerUserSchema>;
@@ -76,6 +77,7 @@ export function RegisterStaffForm() {
           rol: data.rol,
           especialidad: data.rol === "Groomer" ? data.especialidad : undefined,
           turno: ["Admin", "Recepcion", "Groomer"].includes(data.rol) ? data.turno : undefined,
+          capacidadDiaria: data.rol === "Groomer" ? data.capacidadDiaria : undefined,
         });
         toast.success(`${data.rol} registrado exitosamente. Se envió un email con sus credenciales.`);
       }
@@ -178,17 +180,35 @@ export function RegisterStaffForm() {
                   {...register("turno")}
                   className="w-full h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold shadow-cartoon-sm focus:outline-none focus:ring-4 focus:ring-primary/50"
                 >
-                  <option value="Mañana">Mañana (09:00 - 13:00)</option>
+                  <option value="Mañana">Mañana (08:00 - 13:00)</option>
                   <option value="Tarde">Tarde (14:00 - 18:00)</option>
-                  <option value="Completo">Completo (09:00 - 18:00)</option>
+                  <option value="Completo">Completo (08:00 - 18:00)</option>
                 </select>
-              </div>
-              {selectedRol === "Groomer" && (
-                <div className="space-y-2">
-                  <Label htmlFor="especialidad">Especialidad</Label>
-                  <Input id="especialidad" placeholder="Corte fino, estilizado" {...register("especialidad")} />
                 </div>
-              )}
+                {selectedRol === "Groomer" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="especialidad">Especialidad</Label>
+                      <Input id="especialidad" placeholder="Corte fino, estilizado" {...register("especialidad")} />
+                    </div>
+                    {/* 👇 NUEVO: Capacidad diaria */}
+                    <div className="space-y-2 mt-4">
+                      <Label htmlFor="capacidadDiaria">Capacidad máxima de citas por día</Label>
+                      <Input
+                        id="capacidadDiaria"
+                        type="number"
+                        min="1"
+                        max="20"
+                        placeholder="6"
+                        defaultValue="6"
+                        {...register("capacidadDiaria", { valueAsNumber: true })}
+                      />
+                      <p className="text-xs text-foreground/50">
+                        Número máximo de servicios que puede realizar al día (por defecto 6)
+                      </p>
+                    </div>
+                  </>
+                )}
             </div>
           )}
 
@@ -233,3 +253,5 @@ export function RegisterStaffForm() {
     </Card>
   );
 }
+
+ 

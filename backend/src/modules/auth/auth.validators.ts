@@ -77,6 +77,7 @@ export const registerStaffSchema = z.object({
       .enum(['Mañana', 'Tarde', 'Completo'], {
         errorMap: () => ({ message: 'Turno inválido' }),
       }),
+    capacidadDiaria: z.number().int().min(1).max(20).optional(),
   }),
 });
 

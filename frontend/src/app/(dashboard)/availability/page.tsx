@@ -367,7 +367,7 @@ function HorarioDialog({ open, onOpenChange, groomers, diaSemana, onSuccess }: {
   const [form, setForm] = useState({
     groomerId: groomers[0]?.id || 0,
     diaSemana: diaSemana,
-    horaInicio: "09:00",
+    horaInicio: "08:00",
     horaFin: "18:00",
   });
   const [loading, setLoading] = useState(false);

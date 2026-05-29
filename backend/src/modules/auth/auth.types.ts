@@ -22,7 +22,8 @@ export interface RegisterStaffDTO {
   rol: 'Recepcion' | 'Groomer';
   especialidad?: string;
   turno: 'Mañana' | 'Tarde' | 'Completo';
-  horarioTrabajo?: any;  // 👈 AGREGADO
+  horarioTrabajo?: any;
+  capacidadDiaria?: number;  // 👈 AGREGADO
 }
 
 // DTO para login

@@ -25,4 +25,7 @@ router.get('/resumen', authenticate, authorize('Admin', 'Recepcion'), InventoryC
 router.post('/movimientos', authenticate, authorize('Admin', 'Recepcion', 'Groomer'), validate(movimientoInventarioSchema), InventoryController.registrarMovimiento);
 router.get('/consumo', authenticate, authorize('Admin', 'Recepcion'), InventoryController.getConsumo);
 
+// Log de insumos
+router.get('/log-insumos', authenticate, authorize('Admin'), InventoryController.getLogInsumos);
+router.get('/log-insumos/resumen', authenticate, authorize('Admin'), InventoryController.getResumenPorGroomer);
 export default router;

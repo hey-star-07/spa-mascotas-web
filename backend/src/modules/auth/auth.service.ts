@@ -130,12 +130,13 @@ export class AuthService {
           data: {
             usuarioId: usuario.id,
             especialidad: data.especialidad,
+            capacidadDiaria: data.capacidadDiaria || 6,
             horarioTrabajo: data.horarioTrabajo || {
-              Lunes: { inicio: '09:00', fin: '18:00' },
-              Martes: { inicio: '09:00', fin: '18:00' },
-              Miercoles: { inicio: '09:00', fin: '18:00' },
-              Jueves: { inicio: '09:00', fin: '18:00' },
-              Viernes: { inicio: '09:00', fin: '18:00' },
+              Lunes: { inicio: '08:00', fin: '18:00' },
+              Martes: { inicio: '08:00', fin: '18:00' },
+              Miercoles: { inicio: '08:00', fin: '18:00' },
+              Jueves: { inicio: '08:00', fin: '18:00' },
+              Viernes: { inicio: '08:00', fin: '18:00' },
             },
           },
         });

@@ -10,9 +10,12 @@ import { cn } from "@/lib/utils";
 import { Scissors, Calendar } from "lucide-react";
 import { PawPrint } from "lucide-react";
 import { CalendarPlus, XCircle } from "lucide-react";
+import { Package } from "lucide-react";
+import { AlertTriangle, Clock} from "lucide-react";
 import { ClipboardList } from "lucide-react";
 import { Box } from "lucide-react";
 import { Receipt } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import {
   LayoutDashboard,
   User,
@@ -29,16 +32,20 @@ const menuItems = [
   { href: "/my-pets", label: "Mis Mascotas", icon: PawPrint, roles: ["Cliente"] },
   { href: "/users", label: "Gestionar Personal", icon: UserPlus, roles: ["Admin"] },  
   { href: "/services", label: "Servicios", icon: Scissors, roles: ["Admin"] },
-  { href: "/availability", label: "Disponibilidad", icon: Calendar, roles: ["Admin", "Recepcion"] },
-  { href: "/appointments", label: "Citas", icon: Calendar, roles: ["Admin", "Recepcion"]},
+  { href: "/availability", label: "Disponibilidad", icon: Clock, roles: ["Admin", "Recepcion"] },
+  { href: "/calendar", label: "Calendario", icon: CalendarDays, roles: ["Admin", "Recepcion"] },
+  { href: "/appointments", label: "Citas", icon: Calendar, roles: ["Admin", "Recepcion"] },
+  { href: "/appointments/pending", label: "Solicitudes Pendientes", icon: AlertTriangle, roles: ["Admin", "Recepcion"] },
   { href: "/my-appointments", label: "Mis Citas", icon: Calendar, roles: ["Cliente"] },
   { href: "/groomer-dashboard", label: "Mi Agenda", icon: Calendar, roles: ["Groomer"] },
   { href: "/grooming", label: "Fichas Técnicas", icon: ClipboardList, roles: ["Groomer"] },
   { href: "/inventory", label: "Inventario", icon: Box, roles: ["Admin", "Recepcion"] },
+  { href: "/inventory/log", label: "Log de Insumos", icon: ScrollText, roles: ["Admin"] },
   { href: "/billing", label: "Facturación", icon: Receipt, roles: ["Admin", "Recepcion", "Cliente"] },
   { href: "/settings", label: "Configuración", icon: Settings, roles: ["Admin", "Recepcion", "Groomer", "Cliente"] },
   { href: "/audit-logs", label: "Auditoría", icon: ScrollText, roles: ["Admin"] },
 ];
+
 
 export function Sidebar() {
   const pathname = usePathname();

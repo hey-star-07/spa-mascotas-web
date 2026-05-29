@@ -121,6 +121,14 @@ export class AvailabilityService {
     const diaSemana = fechaHoraInicio.getDay();
     const horaInicio = fechaHoraInicio.toTimeString().slice(0, 5);
     const horaFin = fechaHoraFin.toTimeString().slice(0, 5);
+        // 0. Verificar capacidad diaria
+    const capacidad = await this.getCapacidadDiaria(groomerId, fechaHoraInicio.toISOString().split('T')[0]);
+    if (capacidad.alLimite) {
+      return {
+        available: false,
+        reason: `Groomer al límite de capacidad del día (${capacidad.ocupadas}/${capacidad.limite} citas). No se pueden agendar más servicios.`,
+      };
+    }
 
     // 1. Verificar disponibilidad del día
     const disponibilidad = await prisma.disponibilidad.findFirst({
@@ -187,19 +195,23 @@ export class AvailabilityService {
   }
 
   /**
-   * Obtener slots disponibles para un día específico
+   * Obtener slots disponibles con estado (disponible/ocupado/razón)
    */
   static async getAvailableSlots(
     groomerId: number,
     fecha: string,
     duracionMinutos: number
-  ): Promise<string[]> {
-    const diaSemana = new Date(fecha).getDay();
-    const slots: string[] = [];
+  ): Promise<Array<{ hora: string; disponible: boolean; razon?: string }>> {
+    const diaSemana = new Date(fecha + 'T00:00:00').getDay();
+    const slots: Array<{ hora: string; disponible: boolean; razon?: string }> = [];
 
     const disponibilidad = await prisma.disponibilidad.findMany({
       where: { groomerId, diaSemana },
     });
+
+    if (disponibilidad.length === 0) {
+      return slots;
+    }
 
     for (const disp of disponibilidad) {
       const [hInicio, mInicio] = disp.horaInicio.split(':').map(Number);
@@ -211,21 +223,74 @@ export class AvailabilityService {
       while (horaActual + duracionMinutos <= horaFinMinutos) {
         const h = Math.floor(horaActual / 60);
         const m = horaActual % 60;
-        const slotInicio = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        const slotHora = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
         
-        const fechaInicio = new Date(`${fecha}T${slotInicio}:00`);
+        const fechaInicio = new Date(`${fecha}T${slotHora}:00`);
         const fechaFin = new Date(fechaInicio.getTime() + duracionMinutos * 60000);
 
-        const { available } = await this.isGroomerAvailable(groomerId, fechaInicio, fechaFin);
+        const { available, reason } = await this.isGroomerAvailable(groomerId, fechaInicio, fechaFin);
         
-        if (available) {
-          slots.push(slotInicio);
-        }
+        slots.push({
+          hora: slotHora,
+          disponible: available,
+          razon: available ? undefined : reason,
+        });
 
-        horaActual += 15; // Intervalos de 15 minutos
+        horaActual += 15;
       }
     }
 
     return slots;
+  }
+  /**
+ * Obtener capacidad diaria de un groomer
+ */
+  static async getCapacidadDiaria(groomerId: number, fecha: string): Promise<{
+    total: number;
+    ocupadas: number;
+    disponibles: number;
+    limite: number;
+    alLimite: boolean;
+    horasOcupadas: number;
+  }> {
+    const inicio = new Date(fecha + 'T00:00:00');
+    const fin = new Date(fecha + 'T23:59:59');
+
+    const groomer = await prisma.groomer.findUnique({
+      where: { id: groomerId },
+      select: { capacidadSimultanea: true },
+    });
+
+    const limite = groomer?.capacidadSimultanea || 6; // Por defecto 6
+
+    const ocupadas = await prisma.cita.count({
+      where: {
+        groomerId,
+        fechaHoraInicio: { gte: inicio, lte: fin },
+        estado: { notIn: ['Cancelada', 'NoAsistio'] },
+      },
+    });
+
+    // También contar duración total en horas
+    const citas = await prisma.cita.findMany({
+      where: {
+        groomerId,
+        fechaHoraInicio: { gte: inicio, lte: fin },
+        estado: { notIn: ['Cancelada', 'NoAsistio'] },
+      },
+      select: { duracionEstimadaMinutos: true },
+    });
+
+    const totalMinutos = citas.reduce((sum, c) => sum + c.duracionEstimadaMinutos, 0);
+    const horasOcupadas = totalMinutos / 60;
+
+    return {
+      total: ocupadas,
+      ocupadas,
+      disponibles: Math.max(0, limite - ocupadas),
+      limite,
+      alLimite: ocupadas >= limite,
+      horasOcupadas,
+    };
   }
 }

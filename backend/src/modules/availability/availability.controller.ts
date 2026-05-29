@@ -80,12 +80,43 @@ export class AvailabilityController {
         fecha as string,
         parseInt(duracion as string) || 30
       );
-      res.status(200).json({ status: 'success', data: slots });
+      
+      // Separar disponibles y ocupados
+      const disponibles = slots.filter(s => s.disponible).map(s => s.hora);
+      const ocupados = slots.filter(s => !s.disponible);
+      
+      res.status(200).json({
+        status: 'success',
+        data: {
+          slots: disponibles,
+          todos: slots,
+          resumen: {
+            total: slots.length,
+            disponibles: disponibles.length,
+            ocupados: ocupados.length,
+          },
+        },
+      });
     } catch (error) {
       next(error);
     }
   }
 
+  /**
+ * GET /api/availability/capacidad/:groomerId
+ */
+  static async getCapacidad(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { fecha } = req.query;
+      const capacidad = await AvailabilityService.getCapacidadDiaria(
+        parseInt(req.params.groomerId),
+        (fecha as string) || new Date().toISOString().split('T')[0]
+      );
+      res.status(200).json({ status: 'success', data: capacidad });
+    } catch (error) {
+      next(error);
+    }
+  }
   /**
    * GET /api/availability/bloqueos
    */

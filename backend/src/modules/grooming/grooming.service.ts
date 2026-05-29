@@ -14,6 +14,9 @@ export class GroomingService {
 
   // Obtener ficha por ID
   static async getFichaById(id: number) {
+    if (!id || isNaN(id)) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, 400, 'ID de ficha inválido');
+    }
     const ficha = await prisma.fichaGrooming.findUnique({
       where: { id },
       include: {
@@ -25,7 +28,11 @@ export class GroomingService {
           },
         },
         fotos: true,
-        checklist: { include: { plantillaChecklist: true } },
+        checklist: {
+          include: {
+            plantillaChecklist: true  // 👈 Asegurar que esté incluido
+          }
+        },
         consumoInsumos: { include: { producto: true, variante: true } },
       },
     });
@@ -75,75 +82,100 @@ export class GroomingService {
     });
   }
 
-  // Crear ficha de grooming
+    // Crear ficha de grooming
   static async createFicha(data: CreateFichaDTO) {
-  const cita = await prisma.cita.findUnique({
-    where: { id: data.citaId },
-    include: { mascota: true },
-  });
-  if (!cita) throw new AppError(ErrorCodes.USER_NOT_FOUND, 404, 'Cita no encontrada');
-
-  const existing = await prisma.fichaGrooming.findUnique({ where: { citaId: data.citaId } });
-  if (existing) return existing; // Ya existe, devolverla
-
-  const ficha = await prisma.fichaGrooming.create({
-    data: {
-      citaId: data.citaId,
-      razaTamanoMomento: data.razaTamanoMomento || cita.mascota?.raza || '',
-      temperaturaAnimal: data.temperaturaAnimal || null,
-      notasInternas: data.notasInternas || null,
-      estadoIngreso: data.estadoIngreso || null,
-      comportamiento: data.comportamiento || null,
-      recomendaciones: data.recomendaciones || null,
-    },
-  });
-
-  await prisma.cita.update({
-    where: { id: data.citaId },
-    data: { estado: 'EnProgreso' },
-  });
-
-  // Crear checklist desde plantilla
-  const plantillas = await prisma.plantillaChecklist.findMany({
-    where: { servicioId: cita.servicioId },
-    orderBy: { orden: 'asc' },
-  });
-
-  if (plantillas.length > 0) {
-    await prisma.checklistFicha.createMany({
-      data: plantillas.map(p => ({
-        fichaGroomingId: ficha.id,
-        plantillaChecklistId: p.id,
-        completado: false,
-      })),
+    const cita = await prisma.cita.findUnique({
+      where: { id: data.citaId },
+      include: { mascota: true },
     });
+    if (!cita) throw new AppError(ErrorCodes.USER_NOT_FOUND, 404, 'Cita no encontrada');
+
+    const existing = await prisma.fichaGrooming.findUnique({ where: { citaId: data.citaId } });
+    if (existing) return existing; // Ya existe, devolverla
+
+    const ficha = await prisma.fichaGrooming.create({
+      data: {
+        citaId: data.citaId,
+        razaTamanoMomento: data.razaTamanoMomento || cita.mascota?.raza || '',
+        temperaturaAnimal: data.temperaturaAnimal || null,
+        notasInternas: data.notasInternas || null,
+        estadoIngreso: data.estadoIngreso || null,
+        comportamiento: data.comportamiento || null,
+        recomendaciones: data.recomendaciones || null,
+      },
+    });
+
+    await prisma.cita.update({
+      where: { id: data.citaId },
+      data: { estado: 'EnProgreso' },
+    });
+
+    // Crear checklist desde plantilla
+    const plantillas = await prisma.plantillaChecklist.findMany({
+      where: { servicioId: cita.servicioId },
+      orderBy: { orden: 'asc' },
+    });
+
+    if (plantillas.length > 0) {
+      await prisma.checklistFicha.createMany({
+        data: plantillas.map(p => ({
+          fichaGroomingId: ficha.id,
+          plantillaChecklistId: p.id,
+          completado: false,
+        })),
+      });
+    }
+
+    return this.getFichaById(ficha.id);
   }
 
-  return this.getFichaById(ficha.id);
-}
-
-  // Actualizar ficha
-  static async updateFicha(id: number, data: UpdateFichaDTO) {
-    return prisma.fichaGrooming.update({
-      where: { id },
-      data,
-    });
-  }
+    // Actualizar ficha
+    static async updateFicha(id: number, data: UpdateFichaDTO) {
+      return prisma.fichaGrooming.update({
+        where: { id },
+        data,
+      });
+    }
 
   // Cerrar ficha
   static async cerrarFicha(id: number) {
     const ficha = await prisma.fichaGrooming.findUnique({
       where: { id },
-      include: { checklist: true, consumoInsumos: true },
+      include: {
+        checklist: {
+          include: {
+            plantillaChecklist: true  // 👈 IMPORTANTE: incluir la plantilla
+          }
+        },
+        consumoInsumos: true,
+      },
     });
+    
     if (!ficha) throw new AppError(ErrorCodes.USER_NOT_FOUND, 404, 'Ficha no encontrada');
 
-    // Verificar que el checklist esté completo (al menos 5 items)
+    // Validar 100% del checklist
     const itemsCompletados = ficha.checklist.filter(c => c.completado).length;
     const itemsTotal = ficha.checklist.length;
-    
-    if (itemsTotal >= 5 && itemsCompletados < 5) {
-      throw new AppError(ErrorCodes.VALIDATION_ERROR, 422, `Debes completar al menos 5 items del checklist (${itemsCompletados}/${itemsTotal})`);
+
+    if (itemsTotal === 0) {
+      throw new AppError(
+        ErrorCodes.VALIDATION_ERROR, 
+        422, 
+        'No hay items de checklist configurados para este servicio.'
+      );
+    }
+
+    if (itemsCompletados < itemsTotal) {
+      const itemsPendientes = ficha.checklist
+        .filter(c => !c.completado)
+        .map(c => c.plantillaChecklist?.item || `Ítem #${c.plantillaChecklistId}`)
+        .join(', ');
+      
+      throw new AppError(
+        ErrorCodes.VALIDATION_ERROR,
+        422,
+        `Debes completar todos los items del checklist (${itemsCompletados}/${itemsTotal}). Pendientes: ${itemsPendientes}`
+      );
     }
 
     // Cerrar ficha
@@ -161,15 +193,13 @@ export class GroomingService {
       data: { estado: 'Completada' },
     });
 
-    // Descontar insumos del inventario
+    // Descontar insumos
     for (const insumo of ficha.consumoInsumos) {
       if (!insumo.devuelto) {
         if (insumo.varianteId) {
-          // Obtener stock actual
           const variante = await prisma.varianteProducto.findUnique({
             where: { id: insumo.varianteId },
           });
-          
           if (variante) {
             const nuevoStock = Math.max(0, variante.stockAdicional - Number(insumo.cantidad));
             await prisma.varianteProducto.update({

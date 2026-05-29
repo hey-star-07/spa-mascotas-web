@@ -13,6 +13,7 @@ router.get('/check', authenticate, authorize('Admin', 'Recepcion'), Availability
 router.get('/slots', authenticate, AvailabilityController.getSlots);
 router.get('/bloqueos', authenticate, authorize('Admin', 'Recepcion'), AvailabilityController.getBloqueos);
 router.get('/groomer/:groomerId', authenticate, AvailabilityController.getByGroomer);
+router.get('/capacidad/:groomerId', authenticate, authorize('Admin', 'Recepcion'), AvailabilityController.getCapacidad);
 
 // Escritura (Admin)
 router.post('/', authenticate, authorize('Admin'), validate(createAvailabilitySchema), AvailabilityController.create);

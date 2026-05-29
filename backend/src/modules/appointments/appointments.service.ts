@@ -4,6 +4,7 @@ import { ErrorCodes } from '../../shared/errors/errorCodes';
 import { CreateAppointmentDTO, UpdateAppointmentDTO, AppointmentFilters } from './appointments.types';
 import { AvailabilityService } from '../availability/availability.service';
 import { ServicesService } from '../services/services.service';
+import { format } from 'path/win32';
 
 export class AppointmentsService {
   /**
@@ -13,11 +14,10 @@ export class AppointmentsService {
     const where: any = {};
 
     if (filters.fecha) {
-      const inicio = new Date(filters.fecha);
-      inicio.setHours(0, 0, 0, 0);
-      const fin = new Date(filters.fecha);
-      fin.setHours(23, 59, 59, 999);
+      const inicio = new Date(filters.fecha + 'T00:00:00.000Z');
+      const fin = new Date(filters.fecha + 'T23:59:59.999Z');
       where.fechaHoraInicio = { gte: inicio, lte: fin };
+      console.log('🔍 DEBUG - Filtrando por fecha:', filters.fecha, '→', inicio, 'a', fin);
     }
 
     if (filters.groomerId) where.groomerId = parseInt(filters.groomerId as any);
@@ -28,11 +28,13 @@ export class AppointmentsService {
       where.mascota = { clienteId: parseInt(filters.clienteId as any) };
     }
 
-    return prisma.cita.findMany({
+    console.log('🔍 DEBUG - Where final:', JSON.stringify(where));
+
+    const citas = await prisma.cita.findMany({
       where,
       include: {
         mascota: {
-          select: { id: true, nombre: true, raza: true, tamanio: true, especie: true },
+          select: { id: true, nombre: true, raza: true, tamanio: true, especie: true, imagen: true },
         },
         groomer: {
           include: { usuario: { select: { id: true, nombre: true, apellido: true } } },
@@ -44,6 +46,9 @@ export class AppointmentsService {
       },
       orderBy: { fechaHoraInicio: 'asc' },
     });
+
+    console.log('🔍 DEBUG - Citas encontradas:', citas.length);
+    return citas;
   }
 
   /**
@@ -131,15 +136,29 @@ export class AppointmentsService {
     );
 
     // Si se asigna groomer, verificar disponibilidad
+    // En el método create, donde se valida disponibilidad:
     if (data.groomerId) {
+      const fechaFin = new Date(fechaInicio.getTime() + duracionAjustada * 60000);
       const { available, reason } = await AvailabilityService.isGroomerAvailable(
         data.groomerId,
         fechaInicio,
-        new Date(fechaInicio.getTime() + duracionAjustada * 60000)
+        fechaFin
       );
 
       if (!available) {
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, 422, reason || 'Groomer no disponible');
+        // 👇 MENSAJE MÁS CLARO
+        const mensajes: Record<string, string> = {
+          'El groomer no trabaja en este horario': 
+            `El groomer no atiende en este horario.`,
+          'El groomer ya tiene una cita en ese horario':
+            `Conflicto de horario. El groomer ya tiene una cita que se solapa con este servicio de ${duracionAjustada} minutos.`,
+          'Capacidad máxima alcanzada':
+            'El groomer ya alcanzó su límite máximo de citas simultáneas.',
+        };
+
+        const mensajeAmigable = mensajes[reason || ''] || reason || 'Groomer no disponible en este horario';
+        
+        throw new AppError(ErrorCodes.VALIDATION_ERROR, 422, mensajeAmigable);
       }
     }
 

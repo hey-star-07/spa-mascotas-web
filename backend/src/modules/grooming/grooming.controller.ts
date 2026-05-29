@@ -28,45 +28,52 @@ export class GroomingController {
      * POST /api/grooming/iniciar-servicio/:citaId
      * El groomer inicia el servicio → crea la ficha automáticamente
      */
-    static async iniciarServicio(req: Request, res: Response, next: NextFunction) {
-      try {
-        const citaId = parseInt(req.params.citaId);
-        
-        // Verificar que la cita existe y pertenece al groomer
-        const cita = await prisma.cita.findUnique({
-          where: { id: citaId },
-          include: { mascota: true, servicio: true },
-        });
-        
-        if (!cita) throw new AppError(ErrorCodes.USER_NOT_FOUND, 404, 'Cita no encontrada');
-        
-        // Verificar que el groomer autenticado es el asignado
-        const userId = req.user!.userId;
-        const groomer = await prisma.groomer.findUnique({ where: { usuarioId: userId } });
-        if (!groomer || cita.groomerId !== groomer.id) {
-          throw new AppError(ErrorCodes.INSUFFICIENT_PERMISSIONS, 403, 'No tienes esta cita asignada');
-        }
-
-        // Verificar si ya existe una ficha
-        let ficha = await prisma.fichaGrooming.findUnique({ where: { citaId } });
-        
-        if (!ficha) {
-          // Crear ficha automáticamente
-          ficha = await GroomingService.createFicha({
-            citaId,
-            razaTamanoMomento: cita.mascota?.raza || '',
-          });
-        }
-
-        res.status(200).json({
-          status: 'success',
-          data: ficha,
-          message: 'Servicio iniciado. Ficha técnica creada.',
-        });
-      } catch (error) {
-        next(error);
+  static async iniciarServicio(req: Request, res: Response, next: NextFunction) {
+    try {
+      const citaId = parseInt(req.params.citaId);
+      
+      if (!citaId || isNaN(citaId)) {
+        return res.status(400).json({ status: 'error', message: 'ID de cita inválido' });
       }
+      
+      // Verificar que la cita existe y pertenece al groomer
+      const cita = await prisma.cita.findUnique({
+        where: { id: citaId },
+        include: { mascota: true, servicio: true },
+      });
+      
+      if (!cita) {
+        return res.status(404).json({ status: 'error', message: 'Cita no encontrada' });
+      }
+      
+      // Verificar que el groomer autenticado es el asignado
+      const userId = req.user!.userId;
+      const groomer = await prisma.groomer.findUnique({ where: { usuarioId: userId } });
+      if (!groomer || cita.groomerId !== groomer.id) {
+        return res.status(403).json({ status: 'error', message: 'No tienes esta cita asignada' });
+      }
+
+      // Verificar si ya existe una ficha
+      let ficha = await prisma.fichaGrooming.findUnique({ where: { citaId } });
+      
+      if (!ficha) {
+        // Crear ficha automáticamente
+        ficha = await GroomingService.createFicha({
+          citaId,
+          razaTamanoMomento: cita.mascota?.raza || '',
+        });
+      }
+
+      // 👇 ASEGURAR QUE DEVUELVA EL ID
+      res.status(200).json({
+        status: 'success',
+        data: { id: ficha.id },
+        message: 'Servicio iniciado. Ficha técnica creada.',
+      });
+    } catch (error) {
+      next(error);
     }
+  }
 
   // POST /api/grooming/fichas
   static async createFicha(req: Request, res: Response, next: NextFunction) {

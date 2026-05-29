@@ -76,11 +76,11 @@ async function main() {
       capacidadSimultanea: 2,
       especialidad: 'Corte fino y estilizado',
       horarioTrabajo: {
-        Lunes: { inicio: '09:00', fin: '18:00' },
-        Martes: { inicio: '09:00', fin: '18:00' },
-        Miercoles: { inicio: '09:00', fin: '18:00' },
-        Jueves: { inicio: '09:00', fin: '18:00' },
-        Viernes: { inicio: '09:00', fin: '18:00' },
+        Lunes: { inicio: '08:00', fin: '18:00' },
+        Martes: { inicio: '08:00', fin: '18:00' },
+        Miercoles: { inicio: '08:00', fin: '18:00' },
+        Jueves: { inicio: '08:00', fin: '18:00' },
+        Viernes: { inicio: '08:00', fin: '18:00' },
       },
     },
   });
@@ -291,7 +291,7 @@ async function main() {
       data: {
         groomerId: groomer.id,
         diaSemana: dia.dia,
-        horaInicio: '09:00',
+        horaInicio: '08:00',
         horaFin: '18:00',
         intervaloDescanso: {
           inicio: '13:00',

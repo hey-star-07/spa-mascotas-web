@@ -8,7 +8,9 @@ export class AppointmentsController {
    */
   static async getAll(req: Request, res: Response, next: NextFunction) {
     try {
+      console.log('🔍 DEBUG - Filtros recibidos:', req.query);
       const appointments = await AppointmentsService.getAll(req.query as any);
+      console.log('🔍 DEBUG - Citas encontradas:', appointments.length);
       res.status(200).json({ status: 'success', data: appointments, total: appointments.length });
     } catch (error) { next(error); }
   }
@@ -45,9 +47,27 @@ export class AppointmentsController {
       const userId = req.user!.userId;
       const groomer = await prisma.groomer.findUnique({ where: { usuarioId: userId } });
       if (!groomer) return res.status(200).json({ status: 'success', data: [] });
-      const today = new Date().toISOString().split('T')[0];
-      const appointments = await AppointmentsService.getByGroomer(groomer.id, today);
-      res.status(200).json({ status: 'success', data: appointments });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const citas = await prisma.cita.findMany({
+        where: {
+          groomerId: groomer.id,
+          fechaHoraInicio: { gte: today, lt: tomorrow },
+          estado: { notIn: ['Cancelada', 'NoAsistio'] },
+        },
+        include: {
+          mascota: { select: { id: true, nombre: true, raza: true, tamanio: true, alergiasConocidas: true } },
+          servicio: { select: { id: true, nombre: true } },
+          fichaGrooming: { select: { id: true } },
+        },
+        orderBy: { fechaHoraInicio: 'asc' },
+      });
+
+      res.status(200).json({ status: 'success', data: citas });
     } catch (error) { next(error); }
   }
 
@@ -55,9 +75,50 @@ export class AppointmentsController {
    * GET /api/appointments/:id
    */
   static async getById(req: Request, res: Response, next: NextFunction) {
+        try {
+          const appointment = await AppointmentsService.getById(parseInt(req.params.id));
+          res.status(200).json({ status: 'success', data: appointment });
+        } catch (error) { next(error); }
+      }
+
+      /**
+     * GET /api/appointments/my-calendar
+     * Citas del groomer autenticado para un rango de fechas
+     */
+  /**
+   * GET /api/appointments/my-calendar
+   */
+  static async getMyCalendar(req: Request, res: Response, next: NextFunction) {
     try {
-      const appointment = await AppointmentsService.getById(parseInt(req.params.id));
-      res.status(200).json({ status: 'success', data: appointment });
+      const userId = req.user!.userId;
+      const groomer = await prisma.groomer.findUnique({ where: { usuarioId: userId } });
+      if (!groomer) return res.status(200).json({ status: 'success', data: [] });
+
+      const { desde, hasta } = req.query;
+      
+      const where: any = {
+        groomerId: groomer.id,
+        estado: { notIn: ['Cancelada', 'NoAsistio'] },
+      };
+
+      if (desde) {
+        where.fechaHoraInicio = { gte: new Date(desde as string) };
+      }
+      if (hasta) {
+        where.fechaHoraInicio = { ...where.fechaHoraInicio, lte: new Date(hasta as string) };
+      }
+
+      const citas = await prisma.cita.findMany({
+        where,
+        include: {
+          mascota: { select: { id: true, nombre: true, raza: true, imagen: true } },
+          servicio: { select: { id: true, nombre: true, duracionBaseMinutos: true } },
+          fichaGrooming: { select: { id: true, fechaCierre: true } },
+        },
+        orderBy: { fechaHoraInicio: 'asc' },
+      });
+
+      res.status(200).json({ status: 'success', data: citas });
     } catch (error) { next(error); }
   }
 
