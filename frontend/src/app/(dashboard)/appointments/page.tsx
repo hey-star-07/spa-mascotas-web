@@ -37,6 +37,111 @@ interface Groomer {
   groomer?: { id: number };
 }
 
+// ============================================
+// COMPONENTE SELECTOR DE SLOTS (REUTILIZABLE)
+// ============================================
+interface SlotInfo {
+  hora: string;
+  disponible: boolean;
+  razon?: string;
+}
+
+function SlotSelector({
+  groomerId,
+  fecha,
+  servicioId,
+  services,
+  selectedHour,
+  onSelectHour,
+}: {
+  groomerId: number;
+  fecha: string;
+  servicioId: string;
+  services: any[];
+  selectedHour: string;
+  onSelectHour: (hora: string) => void;
+}) {
+  const [slots, setSlots] = useState<SlotInfo[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  useEffect(() => {
+    if (!fecha || !servicioId || !groomerId) {
+      setSlots([]);
+      return;
+    }
+
+    const loadSlots = async () => {
+      setLoadingSlots(true);
+      try {
+        const servicio = services.find(s => s.id.toString() === servicioId);
+        const duracion = servicio?.duracionBaseMinutos || 30;
+
+        const { data } = await api.get("/availability/slots", {
+          params: { groomerId, fecha, duracion },
+        });
+        setSlots(Array.isArray(data.data) ? data.data : []);
+      } catch {
+        setSlots([]);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+
+    loadSlots();
+  }, [fecha, servicioId, groomerId, services]);
+
+  if (loadingSlots) {
+    return <LoadingSpinner size="sm" text="Cargando horarios..." />;
+  }
+
+  if (slots.length === 0) {
+    return (
+      <div className="bg-rose/10 border-2 border-rose rounded-xl p-3 text-center">
+        <p className="text-sm font-bold text-rose">Sin horarios disponibles</p>
+        <p className="text-xs">Intenta con otra fecha o groomer</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Leyenda */}
+      <div className="flex items-center gap-4 text-[10px] mb-1">
+        <span className="flex items-center gap-1">
+          <span className="w-3 h-3 rounded border-2 border-foreground bg-primary inline-block" /> Disponible
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-3 h-3 rounded border-2 border-foreground bg-rose/50 inline-block" /> Ocupado
+        </span>
+      </div>
+
+      <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-[200px] overflow-y-auto">
+        {slots.map((slot) => (
+          <button
+            key={slot.hora}
+            type="button"
+            disabled={!slot.disponible}
+            onClick={() => onSelectHour(slot.hora)}
+            className={`py-2 px-3 rounded-xl border-3 border-foreground text-sm font-bold transition-all ${
+              selectedHour === slot.hora
+                ? "bg-primary shadow-cartoon-sm"
+                : !slot.disponible
+                ? "bg-rose/20 opacity-50 cursor-not-allowed line-through"
+                : "bg-white hover:bg-primary/20"
+            }`}
+            title={!slot.disponible ? slot.razon || "No disponible" : `Disponible a las ${slot.hora}`}
+          >
+            {slot.hora}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] text-foreground/50">
+        {slots.filter(s => s.disponible).length} de {slots.length} horarios disponibles
+      </p>
+    </>
+  );
+}
+
 const GROOMER_COLORS = ["#A8D5BA", "#F4E4BA", "#E8A87C", "#C3B1E1", "#F4C2C2", "#7C8B9E"];
 
 export default function AppointmentsPage() {
@@ -55,7 +160,8 @@ export default function AppointmentsPage() {
   const [services, setServices] = useState<any[]>([]);
   const [formData, setFormData] = useState({ mascotaId: "", servicioId: "" });
   const [creating, setCreating] = useState(false);
-
+  const [slots, setSlots] = useState<SlotInfo[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const loadData = async () => {
     setLoading(true);
     try {
@@ -159,6 +265,8 @@ export default function AppointmentsPage() {
   for (let h = 9; h <= 17; h++) {
     hours.push(`${h.toString().padStart(2, "0")}:00`);
   }
+
+
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -281,32 +389,74 @@ export default function AppointmentsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" /> Asignar a {selectedGroomer?.nombre}
+              <User className="h-5 w-5" /> Asignar Cita a {selectedGroomer?.nombre}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Mascota */}
             <div>
               <Label>Mascota *</Label>
-              <select value={formData.mascotaId} onChange={e => setFormData({...formData, mascotaId: e.target.value})} className="w-full h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold">
+              <select
+                value={formData.mascotaId}
+                onChange={e => setFormData({...formData, mascotaId: e.target.value})}
+                className="w-full h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold"
+              >
                 <option value="">Seleccionar</option>
-                {pets.map((p: any) => <option key={p.id} value={p.id}>{p.nombre} ({p.especie}) - {p.cliente?.usuario?.nombre}</option>)}
+                {pets.map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.nombre} ({p.especie}) - {p.cliente?.usuario?.nombre}</option>
+                ))}
               </select>
             </div>
+
+            {/* Servicio */}
             <div>
               <Label>Servicio *</Label>
-              <select value={formData.servicioId} onChange={e => setFormData({...formData, servicioId: e.target.value})} className="w-full h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold">
+              <select
+                value={formData.servicioId}
+                onChange={e => setFormData({...formData, servicioId: e.target.value})}
+                className="w-full h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold"
+              >
                 <option value="">Seleccionar</option>
-                {services.map((s: any) => <option key={s.id} value={s.id}>{s.nombre} - {s.duracionBaseMinutos} min</option>)}
+                {services.map((s: any) => (
+                  <option key={s.id} value={s.id}>{s.nombre} - {s.duracionBaseMinutos} min</option>
+                ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Fecha *</Label><Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /></div>
-              <div><Label>Hora *</Label><Input type="time" value={selectedHour} onChange={e => setSelectedHour(e.target.value)} /></div>
+
+            {/* Fecha */}
+            <div>
+              <Label>Fecha *</Label>
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+
+            {/* Slots disponibles */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1"><Clock className="h-4 w-4" />Franja Horaria *</Label>
+
+              {!selectedDate || !formData.servicioId ? (
+                <p className="text-xs text-foreground/50">Selecciona fecha y servicio para ver horarios</p>
+              ) : (
+                <SlotSelector
+                  groomerId={selectedGroomer?.groomer?.id || selectedGroomer?.id || 0}
+                  fecha={selectedDate}
+                  servicioId={formData.servicioId}
+                  services={services}
+                  selectedHour={selectedHour}
+                  onSelectHour={setSelectedHour}
+                />
+              )}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreateAppointment} disabled={creating}>{creating ? "Creando..." : "Asignar Cita"}</Button>
+            <Button onClick={handleCreateAppointment} disabled={creating}>
+              {creating ? "Creando..." : "Asignar Cita"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

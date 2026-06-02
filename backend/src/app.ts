@@ -17,6 +17,8 @@ import uploadRoutes from './modules/upload/upload.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import auditLogsRoutes from './modules/audit-logs/audit-logs.routes';
 import appointmentsRoutes from './modules/appointments/appointments.routes';
+import storeRoutes from './modules/store/store.routes';
+import promotionsRoutes from './modules/promotions/promotions.routes';
 import { logger } from './config/logger';
 
 
@@ -79,6 +81,9 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationsRoutes);
+
+app.use('/api/store', storeRoutes);
+app.use('/api/promotions', promotionsRoutes);
 // ============================================
 // MANEJO DE ERRORES
 // ============================================

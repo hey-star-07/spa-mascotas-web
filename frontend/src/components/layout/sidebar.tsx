@@ -7,7 +7,7 @@ import { useUIStore } from "@/store/ui-store";
 import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Scissors, Calendar } from "lucide-react";
+import { Scissors, Calendar, ShoppingBag } from "lucide-react";
 import { PawPrint } from "lucide-react";
 import { CalendarPlus, XCircle } from "lucide-react";
 import { Package } from "lucide-react";
@@ -16,6 +16,7 @@ import { ClipboardList } from "lucide-react";
 import { Box } from "lucide-react";
 import { Receipt } from "lucide-react";
 import { CalendarDays } from "lucide-react";
+import { Tag } from "lucide-react";
 import {
   LayoutDashboard,
   User,
@@ -40,7 +41,10 @@ const menuItems = [
   { href: "/groomer-dashboard", label: "Mi Agenda", icon: Calendar, roles: ["Groomer"] },
   { href: "/grooming", label: "Fichas Técnicas", icon: ClipboardList, roles: ["Groomer"] },
   { href: "/inventory", label: "Inventario", icon: Box, roles: ["Admin", "Recepcion"] },
+  { href: "/inventory/alerts", label: "Alertas", icon: AlertTriangle, roles: ["Admin", "Recepcion"] },
   { href: "/inventory/log", label: "Log de Insumos", icon: ScrollText, roles: ["Admin"] },
+  { href: "/store", label: "Tienda", icon: ShoppingBag, roles: ["Cliente", "Admin", "Recepcion"] },
+  { href: "/promotions", label: "Promociones", icon: Tag, roles: ["Admin"] },
   { href: "/billing", label: "Facturación", icon: Receipt, roles: ["Admin", "Recepcion", "Cliente"] },
   { href: "/settings", label: "Configuración", icon: Settings, roles: ["Admin", "Recepcion", "Groomer", "Cliente"] },
   { href: "/audit-logs", label: "Auditoría", icon: ScrollText, roles: ["Admin"] },

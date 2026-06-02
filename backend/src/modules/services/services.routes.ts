@@ -16,4 +16,8 @@ router.get('/:id', authenticate, ServicesController.getById);
 router.post('/', authenticate, authorize('Admin'), validate(createServiceSchema), ServicesController.create);
 router.put('/:id', authenticate, authorize('Admin'), validate(updateServiceSchema), ServicesController.update);
 
+// Checklist del servicio
+router.get('/:id/checklist', authenticate, authorize('Admin'), ServicesController.getChecklist);
+router.post('/:id/checklist', authenticate, authorize('Admin'), ServicesController.addChecklistItem);
+router.delete('/:id/checklist/:itemId', authenticate, authorize('Admin'), ServicesController.deleteChecklistItem);
 export default router;

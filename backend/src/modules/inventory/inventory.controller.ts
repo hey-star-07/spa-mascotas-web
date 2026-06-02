@@ -93,45 +93,116 @@ export class InventoryController {
  * GET /api/inventory/log-insumos
  * Log completo de consumo de insumos por groomer
  */
-static async getLogInsumos(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { groomerId, desde, hasta, page = '1', limit = '20' } = req.query as any;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+  static async getLogInsumos(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { groomerId, desde, hasta, page = '1', limit = '20' } = req.query as any;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const where: any = {};
+      const where: any = {};
 
-    if (groomerId) {
-      where.fichaGrooming = {
-        cita: { groomerId: parseInt(groomerId) },
+      if (groomerId) {
+        where.fichaGrooming = {
+          cita: { groomerId: parseInt(groomerId) },
+        };
+      }
+
+      if (desde || hasta) {
+        where.createdAt = {};
+        if (desde) where.createdAt.gte = new Date(desde);
+        if (hasta) where.createdAt.lte = new Date(hasta);
+      }
+
+      const [consumos, total] = await Promise.all([
+        prisma.consumoInsumo.findMany({
+          where,
+          include: {
+            producto: { select: { id: true, nombre: true, sku: true } },
+            variante: { select: { id: true, atributo: true, valor: true } },
+            fichaGrooming: {
+              select: {
+                id: true,
+                fechaCierre: true,
+                cita: {
+                  select: {
+                    id: true,
+                    fechaHoraInicio: true,
+                    mascota: { select: { nombre: true } },
+                    servicio: { select: { nombre: true } },
+                    groomer: {
+                      select: {
+                        id: true,
+                        usuario: { select: { id: true, nombre: true, apellido: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: parseInt(limit),
+        }),
+        prisma.consumoInsumo.count({ where }),
+      ]);
+
+      // Calcular resumen
+      const resumen = {
+        totalConsumos: total,
+        usados: consumos.filter(c => !c.devuelto && !c.merma).length,
+        devueltos: consumos.filter(c => c.devuelto).length,
+        mermas: consumos.filter(c => c.merma).length,
+        cantidadTotalUsada: consumos
+          .filter(c => !c.devuelto)
+          .reduce((sum, c) => sum + Number(c.cantidad), 0),
+        cantidadDevuelta: consumos
+          .filter(c => c.devuelto)
+          .reduce((sum, c) => sum + Number(c.cantidad), 0),
       };
-    }
 
-    if (desde || hasta) {
-      where.createdAt = {};
-      if (desde) where.createdAt.gte = new Date(desde);
-      if (hasta) where.createdAt.lte = new Date(hasta);
+      res.status(200).json({
+        status: 'success',
+        data: {
+          consumos,
+          resumen,
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(total / parseInt(limit)),
+        },
+      });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    const [consumos, total] = await Promise.all([
-      prisma.consumoInsumo.findMany({
-        where,
+  /**
+   * GET /api/inventory/log-insumos/resumen
+   * Resumen agrupado por groomer
+   */
+  static async getResumenPorGroomer(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { desde, hasta } = req.query as any;
+      const whereConsumo: any = {};
+
+      if (desde || hasta) {
+        whereConsumo.createdAt = {};
+        if (desde) whereConsumo.createdAt.gte = new Date(desde);
+        if (hasta) whereConsumo.createdAt.lte = new Date(hasta);
+      }
+
+      const consumos = await prisma.consumoInsumo.findMany({
+        where: whereConsumo,
         include: {
-          producto: { select: { id: true, nombre: true, sku: true } },
-          variante: { select: { id: true, atributo: true, valor: true } },
+          producto: { select: { nombre: true } },
           fichaGrooming: {
             select: {
-              id: true,
-              fechaCierre: true,
               cita: {
                 select: {
-                  id: true,
-                  fechaHoraInicio: true,
-                  mascota: { select: { nombre: true } },
-                  servicio: { select: { nombre: true } },
                   groomer: {
                     select: {
                       id: true,
-                      usuario: { select: { id: true, nombre: true, apellido: true } },
+                      usuario: { select: { nombre: true, apellido: true } },
                     },
                   },
                 },
@@ -139,124 +210,174 @@ static async getLogInsumos(req: Request, res: Response, next: NextFunction) {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: parseInt(limit),
-      }),
-      prisma.consumoInsumo.count({ where }),
-    ]);
+      });
 
-    // Calcular resumen
-    const resumen = {
-      totalConsumos: total,
-      usados: consumos.filter(c => !c.devuelto && !c.merma).length,
-      devueltos: consumos.filter(c => c.devuelto).length,
-      mermas: consumos.filter(c => c.merma).length,
-      cantidadTotalUsada: consumos
-        .filter(c => !c.devuelto)
-        .reduce((sum, c) => sum + Number(c.cantidad), 0),
-      cantidadDevuelta: consumos
-        .filter(c => c.devuelto)
-        .reduce((sum, c) => sum + Number(c.cantidad), 0),
-    };
+      // Agrupar por groomer
+      const porGroomer: Record<number, any> = {};
+      for (const c of consumos) {
+        const groomer = c.fichaGrooming?.cita?.groomer;
+        if (!groomer) continue;
 
-    res.status(200).json({
-      status: 'success',
-      data: {
-        consumos,
-        resumen,
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / parseInt(limit)),
-      },
-    });
-  } catch (error) {
-    next(error);
+        const key = groomer.id;
+        if (!porGroomer[key]) {
+          porGroomer[key] = {
+            groomerId: key,
+            nombre: groomer.usuario.nombre,
+            apellido: groomer.usuario.apellido,
+            totalConsumos: 0,
+            usados: 0,
+            devueltos: 0,
+            mermas: 0,
+            cantidadUsada: 0,
+            cantidadDevuelta: 0,
+            productos: {} as Record<string, number>,
+          };
+        }
+
+        porGroomer[key].totalConsumos++;
+        if (c.devuelto) {
+          porGroomer[key].devueltos++;
+          porGroomer[key].cantidadDevuelta += Number(c.cantidad);
+        } else if (c.merma) {
+          porGroomer[key].mermas++;
+          porGroomer[key].cantidadUsada += Number(c.cantidad);
+        } else {
+          porGroomer[key].usados++;
+          porGroomer[key].cantidadUsada += Number(c.cantidad);
+        }
+
+        const prodNombre = c.producto.nombre;
+        porGroomer[key].productos[prodNombre] = (porGroomer[key].productos[prodNombre] || 0) + Number(c.cantidad);
+      }
+
+      res.status(200).json({
+        status: 'success',
+        data: Object.values(porGroomer),
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-}
 
 /**
- * GET /api/inventory/log-insumos/resumen
- * Resumen agrupado por groomer
+ * GET /api/inventory/alertas-consumo
+ * Alertas de alto consumo por groomer
  */
-static async getResumenPorGroomer(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { desde, hasta } = req.query as any;
-    const whereConsumo: any = {};
+  static async getAlertasConsumo(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { desde, hasta } = req.query;
+      const whereConsumo: any = {};
 
-    if (desde || hasta) {
-      whereConsumo.createdAt = {};
-      if (desde) whereConsumo.createdAt.gte = new Date(desde);
-      if (hasta) whereConsumo.createdAt.lte = new Date(hasta);
-    }
+      if (desde || hasta) {
+        whereConsumo.createdAt = {};
+        if (desde) whereConsumo.createdAt.gte = new Date(desde as string);
+        if (hasta) whereConsumo.createdAt.lte = new Date(hasta as string);
+      }
 
-    const consumos = await prisma.consumoInsumo.findMany({
-      where: whereConsumo,
-      include: {
-        producto: { select: { nombre: true } },
-        fichaGrooming: {
-          select: {
-            cita: {
-              select: {
-                groomer: {
-                  select: {
-                    id: true,
-                    usuario: { select: { nombre: true, apellido: true } },
+      const consumos = await prisma.consumoInsumo.findMany({
+        where: whereConsumo,
+        include: {
+          producto: { select: { nombre: true } },
+          fichaGrooming: {
+            select: {
+              cita: {
+                select: {
+                  groomer: {
+                    select: {
+                      id: true,
+                      usuario: { select: { nombre: true, apellido: true } },
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    // Agrupar por groomer
-    const porGroomer: Record<number, any> = {};
-    for (const c of consumos) {
-      const groomer = c.fichaGrooming?.cita?.groomer;
-      if (!groomer) continue;
-
-      const key = groomer.id;
-      if (!porGroomer[key]) {
-        porGroomer[key] = {
-          groomerId: key,
-          nombre: groomer.usuario.nombre,
-          apellido: groomer.usuario.apellido,
-          totalConsumos: 0,
-          usados: 0,
-          devueltos: 0,
-          mermas: 0,
-          cantidadUsada: 0,
-          cantidadDevuelta: 0,
-          productos: {} as Record<string, number>,
-        };
+      // Agrupar por producto y groomer para detectar consumo elevado
+      const porGroomerYProducto: Record<string, any> = {};
+      
+      for (const c of consumos) {
+        const groomerName = c.fichaGrooming?.cita?.groomer?.usuario?.nombre || 'Desconocido';
+        const productoName = c.producto.nombre;
+        const key = `${groomerName}|${productoName}`;
+        
+        if (!porGroomerYProducto[key]) {
+          porGroomerYProducto[key] = {
+            groomer: groomerName,
+            producto: productoName,
+            cantidadTotal: 0,
+            vecesUsado: 0,
+          };
+        }
+        porGroomerYProducto[key].cantidadTotal += Number(c.cantidad);
+        porGroomerYProducto[key].vecesUsado++;
       }
 
-      porGroomer[key].totalConsumos++;
-      if (c.devuelto) {
-        porGroomer[key].devueltos++;
-        porGroomer[key].cantidadDevuelta += Number(c.cantidad);
-      } else if (c.merma) {
-        porGroomer[key].mermas++;
-        porGroomer[key].cantidadUsada += Number(c.cantidad);
-      } else {
-        porGroomer[key].usados++;
-        porGroomer[key].cantidadUsada += Number(c.cantidad);
-      }
+      // Filtrar los que tienen consumo elevado (más de 5 usos o más de 10 unidades)
+      const alertas = Object.values(porGroomerYProducto)
+        .filter((a: any) => a.vecesUsado >= 5 || a.cantidadTotal >= 10)
+        .sort((a: any, b: any) => b.cantidadTotal - a.cantidadTotal);
 
-      const prodNombre = c.producto.nombre;
-      porGroomer[key].productos[prodNombre] = (porGroomer[key].productos[prodNombre] || 0) + Number(c.cantidad);
+      res.status(200).json({
+        status: 'success',
+        data: alertas,
+      });
+    } catch (error) {
+      next(error);
     }
-
-    res.status(200).json({
-      status: 'success',
-      data: Object.values(porGroomer),
-    });
-  } catch (error) {
-    next(error);
   }
-}
+
+/**
+ * GET /api/inventory/recomendaciones-reabastecimiento
+ * Productos que necesitan reabastecimiento urgente
+ */
+  static async getRecomendacionesReabastecimiento(req: Request, res: Response, next: NextFunction) {
+    try {
+      const productos = await prisma.producto.findMany({
+        include: { variantes: true },
+      });
+
+      const recomendaciones = productos
+        .map(p => {
+          const stockTotal = p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0);
+          const porcentaje = (stockTotal / Math.max(p.stockMinimo, 1)) * 100;
+          let urgencia = 'Baja';
+          let mensaje = '';
+          
+          if (stockTotal === 0) {
+            urgencia = 'Crítica';
+            mensaje = 'AGOTADO - Comprar inmediatamente';
+          } else if (stockTotal <= p.stockMinimo * 0.5) {
+            urgencia = 'Alta';
+            mensaje = `Stock muy bajo (${stockTotal} uds). Comprar esta semana.`;
+          } else if (stockTotal <= p.stockMinimo) {
+            urgencia = 'Media';
+            mensaje = `Stock bajo (${stockTotal} uds). Planificar compra.`;
+          }
+
+          return {
+            id: p.id,
+            nombre: p.nombre,
+            sku: p.sku,
+            stockActual: stockTotal,
+            stockMinimo: p.stockMinimo,
+            porcentaje,
+            urgencia,
+            mensaje,
+          };
+        })
+        .filter(r => r.urgencia !== 'Baja')
+        .sort((a, b) => a.porcentaje - b.porcentaje);
+
+      res.status(200).json({
+        status: 'success',
+        data: recomendaciones,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
   
 }

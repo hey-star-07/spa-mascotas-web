@@ -1,12 +1,12 @@
 import prisma from '../../config/database';
 import { AppError } from '../../shared/errors/AppError';
 import { ErrorCodes } from '../../shared/errors/errorCodes';
-import { CreateAvailabilityDTO, CreateBloqueoDTO } from './availability.types';
 
 export class AvailabilityService {
-  /**
-   * Obtener disponibilidad de un groomer
-   */
+  // ============================================
+  // DISPONIBILIDAD
+  // ============================================
+  
   static async getByGroomer(groomerId: number) {
     return prisma.disponibilidad.findMany({
       where: { groomerId },
@@ -14,32 +14,22 @@ export class AvailabilityService {
     });
   }
 
-  /**
-   * Obtener disponibilidad de todos los groomers
-   */
   static async getAll() {
     return prisma.disponibilidad.findMany({
       include: {
         groomer: {
-          include: {
-            usuario: { select: { nombre: true, apellido: true } },
-          },
+          include: { usuario: { select: { nombre: true, apellido: true } } },
         },
       },
       orderBy: [{ groomerId: 'asc' }, { diaSemana: 'asc' }],
     });
   }
 
-  /**
-   * Crear disponibilidad para un groomer
-   */
-  static async createAvailability(data: CreateAvailabilityDTO) {
-    // Validar que horaFin > horaInicio
+  static async createAvailability(data: any) {
     if (data.horaInicio >= data.horaFin) {
       throw new AppError(ErrorCodes.VALIDATION_ERROR, 422, 'La hora de fin debe ser mayor a la hora de inicio');
     }
 
-    // Verificar que no haya solapamiento en el mismo día
     const existing = await prisma.disponibilidad.findFirst({
       where: {
         groomerId: data.groomerId,
@@ -57,41 +47,32 @@ export class AvailabilityService {
     return prisma.disponibilidad.create({ data });
   }
 
-  /**
-   * Eliminar disponibilidad
-   */
   static async deleteAvailability(id: number) {
     return prisma.disponibilidad.delete({ where: { id } });
   }
 
-  /**
-   * Obtener bloqueos
-   */
+  // ============================================
+  // BLOQUEOS
+  // ============================================
+  
   static async getBloqueos(groomerId?: number) {
     const where: any = {};
     if (groomerId) where.groomerId = groomerId;
-    
     return prisma.bloqueoCalendario.findMany({
       where,
       include: {
         groomer: {
-          include: {
-            usuario: { select: { nombre: true, apellido: true } },
-          },
+          include: { usuario: { select: { nombre: true, apellido: true } } },
         },
       },
       orderBy: { fechaInicio: 'desc' },
     });
   }
 
-  /**
-   * Crear bloqueo
-   */
-  static async createBloqueo(data: CreateBloqueoDTO) {
+  static async createBloqueo(data: any) {
     if (new Date(data.fechaFin) <= new Date(data.fechaInicio)) {
       throw new AppError(ErrorCodes.VALIDATION_ERROR, 422, 'La fecha de fin debe ser posterior a la de inicio');
     }
-
     return prisma.bloqueoCalendario.create({
       data: {
         groomerId: data.groomerId || null,
@@ -103,16 +84,14 @@ export class AvailabilityService {
     });
   }
 
-  /**
-   * Eliminar bloqueo
-   */
   static async deleteBloqueo(id: number) {
     return prisma.bloqueoCalendario.delete({ where: { id } });
   }
 
-  /**
-   * Verificar si un groomer está disponible en un horario específico
-   */
+  // ============================================
+  // VERIFICACIÓN DE DISPONIBILIDAD
+  // ============================================
+
   static async isGroomerAvailable(
     groomerId: number,
     fechaHoraInicio: Date,
@@ -121,12 +100,13 @@ export class AvailabilityService {
     const diaSemana = fechaHoraInicio.getDay();
     const horaInicio = fechaHoraInicio.toTimeString().slice(0, 5);
     const horaFin = fechaHoraFin.toTimeString().slice(0, 5);
-        // 0. Verificar capacidad diaria
+
+    // 0. Verificar capacidad diaria
     const capacidad = await this.getCapacidadDiaria(groomerId, fechaHoraInicio.toISOString().split('T')[0]);
     if (capacidad.alLimite) {
       return {
         available: false,
-        reason: `Groomer al límite de capacidad del día (${capacidad.ocupadas}/${capacidad.limite} citas). No se pueden agendar más servicios.`,
+        reason: `Límite diario alcanzado (${capacidad.ocupadas}/${capacidad.limite} citas)`,
       };
     }
 
@@ -141,23 +121,20 @@ export class AvailabilityService {
     });
 
     if (!disponibilidad) {
-      return { available: false, reason: 'El groomer no trabaja en este horario' };
+      return { available: false, reason: 'Fuera del horario laboral' };
     }
 
     // 2. Verificar bloqueos
     const bloqueo = await prisma.bloqueoCalendario.findFirst({
       where: {
-        OR: [
-          { groomerId },
-          { groomerId: null }, // Bloqueos globales
-        ],
+        OR: [{ groomerId }, { groomerId: null }],
         fechaInicio: { lte: fechaHoraFin },
         fechaFin: { gte: fechaHoraInicio },
       },
     });
 
     if (bloqueo) {
-      return { available: false, reason: `Bloqueo: ${bloqueo.tipo} - ${bloqueo.descripcion || ''}` };
+      return { available: false, reason: `Bloqueo: ${bloqueo.tipo}` };
     }
 
     // 3. Verificar solapamiento con otras citas
@@ -171,10 +148,10 @@ export class AvailabilityService {
     });
 
     if (citaSolapada) {
-      return { available: false, reason: 'El groomer ya tiene una cita en ese horario' };
+      return { available: false, reason: 'Horario ocupado por otra cita' };
     }
 
-    // 4. Verificar capacidad máxima simultánea
+    // 4. Verificar capacidad simultánea
     const groomer = await prisma.groomer.findUnique({ where: { id: groomerId } });
     if (groomer) {
       const citasSimultaneas = await prisma.cita.count({
@@ -187,16 +164,17 @@ export class AvailabilityService {
       });
 
       if (citasSimultaneas >= groomer.capacidadSimultanea) {
-        return { available: false, reason: 'Capacidad máxima alcanzada' };
+        return { available: false, reason: 'Capacidad simultánea máxima alcanzada' };
       }
     }
 
     return { available: true };
   }
 
-  /**
-   * Obtener slots disponibles con estado (disponible/ocupado/razón)
-   */
+  // ============================================
+  // SLOTS DISPONIBLES
+  // ============================================
+
   static async getAvailableSlots(
     groomerId: number,
     fecha: string,
@@ -205,18 +183,25 @@ export class AvailabilityService {
     const diaSemana = new Date(fecha + 'T00:00:00').getDay();
     const slots: Array<{ hora: string; disponible: boolean; razon?: string }> = [];
 
+    console.log('🔍 Buscando slots para groomerId:', groomerId, 'fecha:', fecha, 'diaSemana:', diaSemana, 'duracion:', duracionMinutos);
+
     const disponibilidad = await prisma.disponibilidad.findMany({
       where: { groomerId, diaSemana },
     });
 
+    console.log('🔍 Disponibilidad encontrada:', disponibilidad.length, 'registros');
+
     if (disponibilidad.length === 0) {
+      console.log('🔍 No hay disponibilidad configurada para groomerId:', groomerId, 'diaSemana:', diaSemana);
       return slots;
     }
 
     for (const disp of disponibilidad) {
       const [hInicio, mInicio] = disp.horaInicio.split(':').map(Number);
       const [hFin, mFin] = disp.horaFin.split(':').map(Number);
-      
+
+      console.log(`🔍 Procesando disponibilidad: ${disp.horaInicio} - ${disp.horaFin}`);
+
       let horaActual = hInicio * 60 + mInicio;
       const horaFinMinutos = hFin * 60 + mFin;
 
@@ -224,27 +209,31 @@ export class AvailabilityService {
         const h = Math.floor(horaActual / 60);
         const m = horaActual % 60;
         const slotHora = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-        
+
         const fechaInicio = new Date(`${fecha}T${slotHora}:00`);
         const fechaFin = new Date(fechaInicio.getTime() + duracionMinutos * 60000);
 
         const { available, reason } = await this.isGroomerAvailable(groomerId, fechaInicio, fechaFin);
-        
+
         slots.push({
           hora: slotHora,
           disponible: available,
           razon: available ? undefined : reason,
         });
 
-        horaActual += 15;
+        horaActual += 30;
       }
     }
 
+    console.log(`🔍 Total slots generados: ${slots.length}, disponibles: ${slots.filter(s => s.disponible).length}`);
+
     return slots;
   }
-  /**
- * Obtener capacidad diaria de un groomer
- */
+
+  // ============================================
+  // CAPACIDAD DIARIA
+  // ============================================
+
   static async getCapacidadDiaria(groomerId: number, fecha: string): Promise<{
     total: number;
     ocupadas: number;
@@ -258,10 +247,10 @@ export class AvailabilityService {
 
     const groomer = await prisma.groomer.findUnique({
       where: { id: groomerId },
-      select: { capacidadSimultanea: true },
+      select: { capacidadDiaria: true },
     });
 
-    const limite = groomer?.capacidadSimultanea || 6; // Por defecto 6
+    const limite = groomer?.capacidadDiaria || 6;
 
     const ocupadas = await prisma.cita.count({
       where: {
@@ -271,7 +260,6 @@ export class AvailabilityService {
       },
     });
 
-    // También contar duración total en horas
     const citas = await prisma.cita.findMany({
       where: {
         groomerId,
@@ -282,7 +270,6 @@ export class AvailabilityService {
     });
 
     const totalMinutos = citas.reduce((sum, c) => sum + c.duracionEstimadaMinutos, 0);
-    const horasOcupadas = totalMinutos / 60;
 
     return {
       total: ocupadas,
@@ -290,7 +277,7 @@ export class AvailabilityService {
       disponibles: Math.max(0, limite - ocupadas),
       limite,
       alLimite: ocupadas >= limite,
-      horasOcupadas,
+      horasOcupadas: totalMinutos / 60,
     };
   }
 }

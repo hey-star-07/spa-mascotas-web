@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import api from "@/lib/axios";
 import { useAuthStore } from "@/store/auth-store";
 import { getImageUrl } from "@/lib/images";
@@ -118,6 +119,15 @@ export default function InventoryPage() {
           <AlertTriangle className="mr-2 h-4 w-4" /> Bajo Stock
         </Button>
       </div>
+      <Button variant="outline" className="relative" onClick={() => window.location.href = '/inventory/alerts'}>
+        <AlertTriangle className="mr-2 h-4 w-4" />
+        Ver Alertas
+        {alertas.length > 0 && (
+          <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-[10px]">
+            {alertas.length}
+          </Badge>
+        )}
+      </Button>
 
       {productos.length === 0 ? (
         <EmptyState icon={<Package className="h-12 w-12" />} title="Sin productos" description="No se encontraron productos" />

@@ -161,6 +161,7 @@ model Cliente {
   mascotas                 Mascota[]
   pedidos                  Pedido[]
   facturas                 Factura[]
+  promociones              Promocion[]
 
   @@map("clientes")
 }
@@ -216,6 +217,7 @@ model Producto {
   variantes   VarianteProducto[]
   consumoInsumos ConsumoInsumo[]
   detalleCarritos DetalleCarrito[]
+  promociones     Promocion[]
 
   @@map("productos")
 }
@@ -252,6 +254,7 @@ model Servicio {
 
   citas                     Cita[]
   plantillaChecklist        PlantillaChecklist[]
+  promociones               Promocion[]
 
   @@map("servicios")
 }
@@ -504,6 +507,29 @@ model Pago {
   factura               Factura    @relation(fields: [facturaId], references: [id], onDelete: Cascade)
 
   @@map("pagos")
+}
+
+model Promocion {
+  id          Int       @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  tipo        String    // 'porcentaje' | 'monto_fijo'
+  valor       Decimal
+  fechaInicio DateTime  @map("fecha_inicio")
+  fechaFin    DateTime  @map("fecha_fin")
+  productoId  Int?      @map("producto_id")
+  servicioId  Int?      @map("servicio_id")
+  clienteId   Int?      @map("cliente_id")
+  codigoCupon String?   @unique @map("codigo_cupon")
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  producto    Producto? @relation(fields: [productoId], references: [id], onDelete: SetNull)
+  servicio    Servicio? @relation(fields: [servicioId], references: [id], onDelete: SetNull)
+  cliente     Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  @@map("promociones")
 }
 
 model Disponibilidad {

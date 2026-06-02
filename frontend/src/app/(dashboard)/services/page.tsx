@@ -11,8 +11,11 @@ import { Label } from "@/components/ui/label";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ClipboardList } from "lucide-react";
+import Link from "next/link";
 import { Scissors, Plus, Clock, DollarSign, Edit, Power, PowerOff } from "lucide-react";
 import { toast } from "sonner";
+
 
 interface Service {
   id: number;
@@ -100,16 +103,24 @@ export default function ServicesPage() {
                 <div className="flex items-center gap-2 text-sm font-bold"><Clock className="h-4 w-4" /> {s.duracionBaseMinutos} min</div>
                 <div className="flex items-center gap-2 text-sm font-bold"><DollarSign className="h-4 w-4" /> Bs. {s.precioBase}</div>
                 <div className="text-xs text-foreground/50">Ajuste por tamaño: {(s.factorTamanoRaza * 100).toFixed(0)}%</div>
-                {user?.rol === "Admin" && (
-                  <div className="flex gap-2 pt-2">
-                    <Button size="sm" variant="outline" onClick={() => { setEditingService(s); setFormData({ nombre: s.nombre, descripcion: s.descripcion || "", duracionBaseMinutos: s.duracionBaseMinutos, precioBase: s.precioBase, factorTamanoRaza: s.factorTamanoRaza }); setDialogOpen(true); }}>
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                    <Button size="sm" variant={s.activo ? "destructive" : "default"} onClick={() => toggleActive(s)}>
-                      {s.activo ? <PowerOff className="h-3 w-3" /> : <Power className="h-3 w-3" />}
-                    </Button>
-                  </div>
-                )}
+                  {user?.rol === "Admin" && (
+                    <div className="flex gap-2 pt-2 flex-wrap">
+                      {/* Botón Checklist */}
+                      <Link href={`/services/${s.id}/checklist`}>
+                        <Button size="sm" variant="secondary">
+                          <ClipboardList className="h-3 w-3 mr-1" /> Checklist
+                        </Button>
+                      </Link>
+                      {/* Botón Editar */}
+                      <Button size="sm" variant="outline" onClick={() => { setEditingService(s); setFormData({ nombre: s.nombre, descripcion: s.descripcion || "", duracionBaseMinutos: s.duracionBaseMinutos, precioBase: s.precioBase, factorTamanoRaza: s.factorTamanoRaza }); setDialogOpen(true); }}>
+                        <Edit className="h-3 w-3" />
+                      </Button>
+                      {/* Botón Activar/Desactivar */}
+                      <Button size="sm" variant={s.activo ? "destructive" : "default"} onClick={() => toggleActive(s)}>
+                        {s.activo ? <PowerOff className="h-3 w-3" /> : <Power className="h-3 w-3" />}
+                      </Button>
+                    </div>
+                  )}
               </CardContent>
             </Card>
           ))}

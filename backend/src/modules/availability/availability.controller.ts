@@ -75,27 +75,24 @@ export class AvailabilityController {
   static async getSlots(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { groomerId, fecha, duracion } = req.query;
+      
+      if (!groomerId || !fecha) {
+        res.status(400).json({ 
+          status: 'error', 
+          message: 'groomerId y fecha son requeridos' 
+        });
+      }
+
       const slots = await AvailabilityService.getAvailableSlots(
         parseInt(groomerId as string),
         fecha as string,
         parseInt(duracion as string) || 30
       );
       
-      // Separar disponibles y ocupados
-      const disponibles = slots.filter(s => s.disponible).map(s => s.hora);
-      const ocupados = slots.filter(s => !s.disponible);
-      
+      // Devolver array completo de objetos { hora, disponible, razon }
       res.status(200).json({
         status: 'success',
-        data: {
-          slots: disponibles,
-          todos: slots,
-          resumen: {
-            total: slots.length,
-            disponibles: disponibles.length,
-            ocupados: ocupados.length,
-          },
-        },
+        data: slots,
       });
     } catch (error) {
       next(error);

@@ -106,6 +106,56 @@ export class GroomingController {
       res.status(200).json({ status: 'success', data: item });
     } catch (error) { next(error); }
   }
+    /**
+   * POST /api/grooming/fichas/:id/regenerar-checklist
+   * Regenera el checklist desde la plantilla del servicio
+   */
+  static async regenerarChecklist(req: Request, res: Response, next: NextFunction) {
+    try {
+      const fichaId = parseInt(req.params.id);
+      
+      const ficha = await prisma.fichaGrooming.findUnique({
+        where: { id: fichaId },
+        include: { cita: true },
+      });
+      
+      if (!ficha) throw new AppError(ErrorCodes.USER_NOT_FOUND, 404, 'Ficha no encontrada');
+
+      // Eliminar checklist existente
+      await prisma.checklistFicha.deleteMany({ where: { fichaGroomingId: fichaId } });
+
+      // Cargar plantillas del servicio
+      const plantillas = await prisma.plantillaChecklist.findMany({
+        where: { servicioId: ficha.cita.servicioId },
+        orderBy: { orden: 'asc' },
+      });
+
+      if (plantillas.length === 0) {
+        return res.status(200).json({
+          status: 'success',
+          message: 'No hay plantillas configuradas para este servicio. Configura el checklist primero.',
+          data: { regenerados: 0 },
+        });
+      }
+
+      // Crear nuevos items
+      await prisma.checklistFicha.createMany({
+        data: plantillas.map(p => ({
+          fichaGroomingId: fichaId,
+          plantillaChecklistId: p.id,
+          completado: false,
+        })),
+      });
+
+      res.status(200).json({
+        status: 'success',
+        message: `Checklist regenerado con ${plantillas.length} items`,
+        data: { regenerados: plantillas.length },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 
   // POST /api/grooming/fotos
   static async addFoto(req: Request, res: Response, next: NextFunction) {

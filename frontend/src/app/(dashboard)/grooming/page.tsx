@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
-import { ClipboardList, Dog, Clock, ArrowRight } from "lucide-react";
+import { ClipboardList, Dog, Clock, ArrowRight, CheckCircle, Scissors } from "lucide-react";
 
-interface FichaActiva {
+interface FichaGrooming {
   id: number;
   citaId: number;
   fechaCierre: string | null;
@@ -25,7 +25,7 @@ interface FichaActiva {
 
 export default function GroomingListPage() {
   const router = useRouter();
-  const [fichas, setFichas] = useState<FichaActiva[]>([]);
+  const [fichas, setFichas] = useState<FichaGrooming[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,7 +37,6 @@ export default function GroomingListPage() {
 
   if (loading) return <LoadingSpinner text="Cargando fichas..." />;
 
-  // Separar activas y cerradas
   const activas = fichas.filter(f => !f.fechaCierre);
   const cerradas = fichas.filter(f => f.fechaCierre);
 
@@ -54,12 +53,11 @@ export default function GroomingListPage() {
       </div>
 
       {/* Fichas Activas */}
-      <div>
-        <h2 className="text-xl font-extrabold mb-3 flex items-center gap-2">
-          <Badge variant="secondary">En Progreso</Badge>
-          {activas.length === 0 && <span className="text-sm text-foreground/50 font-normal">Sin fichas activas</span>}
-        </h2>
-        {activas.length > 0 && (
+      {activas.length > 0 && (
+        <div>
+          <h2 className="text-xl font-extrabold mb-3 flex items-center gap-2">
+            <Badge variant="secondary">En Progreso</Badge>
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {activas.map((ficha) => {
               const completados = ficha.checklist?.filter(c => c.completado).length || 0;
@@ -79,18 +77,18 @@ export default function GroomingListPage() {
                         <Clock className="h-3 w-3" />
                         {new Date(ficha.cita.fechaHoraInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
-                      <Badge variant="outline">{completados}/{total} checklist</Badge>
+                      <Badge variant="outline">{completados}/{total}</Badge>
                     </div>
                     <Button size="sm" variant="outline" className="w-full mt-3">
-                      Abrir Ficha <ArrowRight className="ml-2 h-3 w-3" />
+                      <Scissors className="mr-2 h-3 w-3" /> Continuar
                     </Button>
                   </CardContent>
                 </Card>
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Fichas Cerradas */}
       {cerradas.length > 0 && (
@@ -109,7 +107,10 @@ export default function GroomingListPage() {
                       <p className="text-xs">{ficha.cita.servicio.nombre}</p>
                     </div>
                   </div>
-                  <p className="text-xs text-foreground/50">Cerrada: {new Date(ficha.fechaCierre!).toLocaleDateString()}</p>
+                  <div className="flex items-center gap-1 text-xs text-foreground/50">
+                    <CheckCircle className="h-3 w-3 text-primary" />
+                    Cerrada: {ficha.fechaCierre ? new Date(ficha.fechaCierre).toLocaleDateString() : "N/A"}
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -121,11 +122,9 @@ export default function GroomingListPage() {
         <EmptyState
           icon={<ClipboardList className="h-16 w-16" />}
           title="Sin fichas técnicas"
-          description="No tienes fichas de grooming asignadas. Ve a tu agenda para iniciar un servicio."
+          description="No tienes fichas de grooming asignadas."
           action={
-            <Button onClick={() => router.push("/groomer-dashboard")}>
-              Ir a Mi Agenda
-            </Button>
+            <Button onClick={() => router.push("/groomer-dashboard")}>Ir a Mi Agenda</Button>
           }
         />
       )}

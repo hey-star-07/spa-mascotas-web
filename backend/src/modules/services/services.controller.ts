@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ServicesService } from './services.service';
+import prisma from '../../config/database';
 
 export class ServicesController {
   /**
@@ -49,6 +50,48 @@ export class ServicesController {
     } catch (error) {
       next(error);
     }
+  }
+    /**
+   * GET /api/services/:id/checklist
+   */
+  static async getChecklist(req: Request, res: Response, next: NextFunction) {
+    try {
+      const items = await prisma.plantillaChecklist.findMany({
+        where: { servicioId: parseInt(req.params.id) },
+        orderBy: { orden: 'asc' },
+      });
+      res.status(200).json({ status: 'success', data: items });
+    } catch (error) { next(error); }
+  }
+
+  /**
+   * POST /api/services/:id/checklist
+   */
+  static async addChecklistItem(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { item, orden, requiereObservacion } = req.body;
+      const newItem = await prisma.plantillaChecklist.create({
+        data: {
+          servicioId: parseInt(req.params.id),
+          item,
+          orden: orden || 1,
+          requiereObservacion: requiereObservacion || false,
+        },
+      });
+      res.status(201).json({ status: 'success', data: newItem });
+    } catch (error) { next(error); }
+  }
+
+  /**
+   * DELETE /api/services/:id/checklist/:itemId
+   */
+  static async deleteChecklistItem(req: Request, res: Response, next: NextFunction) {
+    try {
+      await prisma.plantillaChecklist.delete({
+        where: { id: parseInt(req.params.itemId) },
+      });
+      res.status(200).json({ status: 'success', message: 'Item eliminado' });
+    } catch (error) { next(error); }
   }
 
   /**

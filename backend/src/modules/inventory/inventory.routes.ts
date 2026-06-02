@@ -21,9 +21,16 @@ router.put('/variantes/:id/stock', authenticate, authorize('Admin', 'Recepcion')
 router.get('/alertas', authenticate, authorize('Admin', 'Recepcion'), InventoryController.getAlertas);
 router.get('/resumen', authenticate, authorize('Admin', 'Recepcion'), InventoryController.getResumen);
 
+// Alertas de consumo
+router.get('/alertas-consumo', authenticate, authorize('Admin', 'Recepcion'), InventoryController.getAlertasConsumo);
+
+
 // Movimientos
 router.post('/movimientos', authenticate, authorize('Admin', 'Recepcion', 'Groomer'), validate(movimientoInventarioSchema), InventoryController.registrarMovimiento);
 router.get('/consumo', authenticate, authorize('Admin', 'Recepcion'), InventoryController.getConsumo);
+
+// Recomendaciones de reabastecimiento
+router.get('/recomendaciones-reabastecimiento', authenticate, authorize('Admin', 'Recepcion'), InventoryController.getRecomendacionesReabastecimiento);
 
 // Log de insumos
 router.get('/log-insumos', authenticate, authorize('Admin'), InventoryController.getLogInsumos);

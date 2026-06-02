@@ -14,6 +14,8 @@ router.post('/fichas', authenticate, authorize('Admin', 'Recepcion', 'Groomer'),
 router.put('/fichas/:id', authenticate, authorize('Admin', 'Recepcion', 'Groomer'), validate(updateFichaSchema), GroomingController.updateFicha);
 router.put('/fichas/:id/cerrar', authenticate, authorize('Admin', 'Recepcion', 'Groomer'), GroomingController.cerrarFicha);
 
+// Regenerar checklist desde plantilla
+router.post('/fichas/:id/regenerar-checklist', authenticate, authorize('Groomer', 'Admin'), GroomingController.regenerarChecklist);
 // Iniciar servicio (crear ficha desde cita)
 router.post('/iniciar-servicio/:citaId', authenticate, authorize('Groomer'), GroomingController.iniciarServicio);
 // Checklist
