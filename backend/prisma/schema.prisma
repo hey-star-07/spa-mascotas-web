@@ -128,6 +128,8 @@ model Usuario {
   citasReprogramadas Cita[]           @relation("CitasReprogramadas")
   auditLogs         AuditLog[]
   carritos          Carrito[]
+  insumosAsignados    InsumoAsignado[] @relation("InsumosAsignados")
+  insumosConfirmados  InsumoAsignado[] @relation("InsumosConfirmados")
 
   @@map("usuarios")
 }
@@ -210,6 +212,9 @@ model Producto {
   imagenUrl   String?           @map("imagen_url")
   stockMinimo Int               @default(5) @map("stock_minimo")
   activo      Boolean           @default(true) @map("activo")
+  esInsumo    Boolean           @default(false) @map("es_insumo")
+  esTienda    Boolean           @default(true) @map("es_tienda")
+  unidadMedida String           @default("unidad") @map("unidad_medida")
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
 
@@ -218,6 +223,8 @@ model Producto {
   consumoInsumos ConsumoInsumo[]
   detalleCarritos DetalleCarrito[]
   promociones     Promocion[]
+  insumosAsignados    InsumoAsignado[]
+  insumosServicio   InsumoServicio[]
 
   @@map("productos")
 }
@@ -234,6 +241,8 @@ model VarianteProducto {
   producto       Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
   consumoInsumos ConsumoInsumo[]
   detalleCarritos DetalleCarrito[]
+  insumosAsignados    InsumoAsignado[]
+  insumosServicio   InsumoServicio[]
 
   @@unique([productoId, atributo, valor])
   @@map("variantes_producto")
@@ -255,8 +264,26 @@ model Servicio {
   citas                     Cita[]
   plantillaChecklist        PlantillaChecklist[]
   promociones               Promocion[]
+  insumosServicio   InsumoServicio[]
 
   @@map("servicios")
+}
+
+model InsumoServicio {
+  id               Int       @id @default(autoincrement())
+  servicioId       Int       @map("servicio_id")
+  productoId       Int       @map("producto_id")
+  varianteId       Int?      @map("variante_id")
+  cantidadSugerida Decimal   @default(1) @map("cantidad_sugerida")
+  orden            Int       @default(1)
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  servicio         Servicio  @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  producto         Producto  @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  variante         VarianteProducto? @relation(fields: [varianteId], references: [id], onDelete: SetNull)
+
+  @@unique([servicioId, productoId, varianteId])
+  @@map("insumos_servicio")
 }
 
 model Mascota {
@@ -321,6 +348,7 @@ model Cita {
   reprogramadoPor         Usuario?   @relation("CitasReprogramadas", fields: [reprogramadoPorId], references: [id])
   fichaGrooming           FichaGrooming?
   factura                 Factura?
+  insumosAsignados        InsumoAsignado[]
 
   @@map("citas")
 }
@@ -357,6 +385,31 @@ model Foto {
   fichaGrooming    FichaGrooming @relation(fields: [fichaGroomingId], references: [id], onDelete: Cascade)
 
   @@map("fotos")
+}
+
+model InsumoAsignado {
+  id              Int       @id @default(autoincrement())
+  citaId          Int       @map("cita_id")
+  productoId      Int       @map("producto_id")
+  varianteId      Int?      @map("variante_id")
+  cantidadAsignada Decimal   @map("cantidad_asignada")
+  cantidadUsada   Decimal?  @map("cantidad_usada")
+  estado          String    @default("pendiente")
+  asignadoPor     Int       @map("asignado_por")
+  confirmadoPor   Int?      @map("confirmado_por")
+  fechaAsignacion DateTime  @default(now()) @map("fecha_asignacion")
+  fechaConfirmacion DateTime? @map("fecha_confirmacion")
+  fechaUso        DateTime? @map("fecha_uso")
+  observacion     String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  cita            Cita      @relation(fields: [citaId], references: [id], onDelete: Cascade)
+  producto        Producto  @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  variante        VarianteProducto? @relation(fields: [varianteId], references: [id], onDelete: SetNull)
+  asignador       Usuario   @relation("InsumosAsignados", fields: [asignadoPor], references: [id])
+  confirmador     Usuario?  @relation("InsumosConfirmados", fields: [confirmadoPor], references: [id])
+
+  @@map("insumos_asignados")
 }
 
 model PlantillaChecklist {

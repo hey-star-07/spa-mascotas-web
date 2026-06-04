@@ -19,6 +19,7 @@ import auditLogsRoutes from './modules/audit-logs/audit-logs.routes';
 import appointmentsRoutes from './modules/appointments/appointments.routes';
 import storeRoutes from './modules/store/store.routes';
 import promotionsRoutes from './modules/promotions/promotions.routes';
+import reportsRoutes from './modules/reports/reports.routes';
 import { logger } from './config/logger';
 
 
@@ -84,6 +85,8 @@ app.use('/api/notifications', notificationsRoutes);
 
 app.use('/api/store', storeRoutes);
 app.use('/api/promotions', promotionsRoutes);
+
+app.use('/api/reports', reportsRoutes);
 // ============================================
 // MANEJO DE ERRORES
 // ============================================

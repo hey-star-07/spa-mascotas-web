@@ -196,38 +196,164 @@ export default function InventoryPage() {
 }
 
 function NuevoProductoForm({ onSuccess }: { onSuccess: () => void }) {
-  const [form, setForm] = useState({ sku: "", nombre: "", descripcion: "", precioBase: 0, stockMinimo: 5, imagenUrl: "" });
+  const [form, setForm] = useState({ sku: "", nombre: "", descripcion: "", precioBase: 0, stockMinimo: 5, imagenUrl: "", esInsumo: false, esTienda: true, unidadMedida: "unidad", categoriaId: "", });
   const [loading, setLoading] = useState(false);
+  const [categorias, setCategorias] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.get("/inventory/categorias").then(({ data }) => setCategorias(data.data || [])).catch(() => {});
+  }, []);
 
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      await api.post("/inventory/productos", form);
-      toast.success("Producto creado");
+      await api.post("/inventory/productos", {
+        ...form,
+        categoriaId: form.categoriaId ? parseInt(form.categoriaId) : undefined,
+      });
+      toast.success("Producto creado exitosamente");
       onSuccess();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Error");
+      toast.error(error.response?.data?.message || "Error al crear producto");
     } finally { setLoading(false); }
   };
 
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>SKU *</Label><Input value={form.sku} onChange={e => setForm({...form, sku: e.target.value})} /></div>
-        <div><Label>Nombre *</Label><Input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} /></div>
+ return (
+    <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+      {/* Tipo de producto */}
+      <div className="bg-secondary/30 rounded-xl p-3">
+        <Label className="text-sm font-extrabold mb-2 block">Tipo de Producto</Label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className={`flex items-center gap-2 p-3 rounded-xl border-3 cursor-pointer transition-all ${
+            form.esTienda ? "border-primary bg-primary/10" : "border-foreground/30"
+          }`}>
+            <input
+              type="checkbox"
+              checked={form.esTienda}
+              onChange={e => setForm({...form, esTienda: e.target.checked})}
+              className="h-5 w-5 rounded accent-primary"
+            />
+            <div>
+              <p className="text-sm font-bold">Tienda</p>
+              <p className="text-[10px] text-foreground/50">Visible para clientes</p>
+            </div>
+          </label>
+          <label className={`flex items-center gap-2 p-3 rounded-xl border-3 cursor-pointer transition-all ${
+            form.esInsumo ? "border-accent bg-accent/10" : "border-foreground/30"
+          }`}>
+            <input
+              type="checkbox"
+              checked={form.esInsumo}
+              onChange={e => setForm({...form, esInsumo: e.target.checked})}
+              className="h-5 w-5 rounded accent-accent"
+            />
+            <div>
+              <p className="text-sm font-bold">Insumo Técnico</p>
+              <p className="text-[10px] text-foreground/50">Uso interno grooming</p>
+            </div>
+          </label>
+        </div>
       </div>
+
+      {/* Datos básicos */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>SKU *</Label>
+          <Input value={form.sku} onChange={e => setForm({...form, sku: e.target.value})} placeholder="SHAMP-001" />
+        </div>
+        <div>
+          <Label>Nombre *</Label>
+          <Input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} placeholder="Shampoo Premium" />
+        </div>
+      </div>
+
+      {/* Categoría */}
+      <div>
+        <Label>Categoría</Label>
+        <select
+          value={form.categoriaId}
+          onChange={e => setForm({...form, categoriaId: e.target.value})}
+          className="w-full h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold"
+        >
+          <option value="">Sin categoría</option>
+          <option value="1">Alimentos</option>
+          <option value="2">Accesorios</option>
+          <option value="3">Higiene</option>
+          <option value="4">Juguetes</option>
+          <option value="5">Salud</option>
+        </select>
+      </div>
+
+      {/* Unidad de medida (solo para insumos) */}
+      {form.esInsumo && (
+        <div>
+          <Label>Unidad de Medida</Label>
+          <select
+            value={form.unidadMedida}
+            onChange={e => setForm({...form, unidadMedida: e.target.value})}
+            className="w-full h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold"
+          >
+            <option value="unidad">Unidad</option>
+            <option value="ml">Mililitros (ml)</option>
+            <option value="gr">Gramos (gr)</option>
+            <option value="par">Par</option>
+            <option value="dosis">Dosis</option>
+            <option value="sobre">Sobre</option>
+          </select>
+        </div>
+      )}
+
+      {/* Imagen */}
       <div>
         <Label>Imagen del producto</Label>
-        <ImageUpload label="Subir imagen" onUpload={(url) => setForm({...form, imagenUrl: url})} />
+        <ImageUpload
+          label="Subir imagen"
+          onUpload={(url) => setForm({...form, imagenUrl: url})}
+        />
+        {form.imagenUrl && (
+          <p className="text-xs text-primary mt-1 font-semibold">Imagen cargada</p>
+        )}
       </div>
-      <div><Label>Descripción</Label><Input value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} /></div>
+
+      {/* Descripción */}
+      <div>
+        <Label>Descripción</Label>
+        <textarea
+          className="w-full min-h-[60px] rounded-xl border-3 border-foreground bg-white p-3 text-sm"
+          value={form.descripcion}
+          onChange={e => setForm({...form, descripcion: e.target.value})}
+          placeholder="Descripción del producto..."
+        />
+      </div>
+
+      {/* Precio y stock */}
       <div className="grid grid-cols-2 gap-3">
-        <div><Label>Precio Base</Label><Input type="number" value={form.precioBase} onChange={e => setForm({...form, precioBase: parseFloat(e.target.value)})} /></div>
-        <div><Label>Stock Mínimo</Label><Input type="number" value={form.stockMinimo} onChange={e => setForm({...form, stockMinimo: parseInt(e.target.value)})} /></div>
+        <div>
+          <Label>Precio Base (Bs.)</Label>
+          <Input type="number" value={form.precioBase} onChange={e => setForm({...form, precioBase: parseFloat(e.target.value) || 0})} />
+        </div>
+        <div>
+          <Label>Stock Mínimo</Label>
+          <Input type="number" value={form.stockMinimo} onChange={e => setForm({...form, stockMinimo: parseInt(e.target.value) || 0})} />
+        </div>
       </div>
+
+      {/* Resumen de lo que se creará */}
+      <div className="bg-secondary/30 rounded-xl p-3 text-xs">
+        <p className="font-bold mb-1">Se creará:</p>
+        <ul className="space-y-0.5">
+          {form.esTienda && <li>Producto de tienda - Visible en catálogo</li>}
+          {form.esInsumo && <li>Insumo técnico - Asignable a groomers</li>}
+          {form.esTienda && form.esInsumo && <li className="text-primary font-bold">Stock compartido entre tienda e insumos</li>}
+        </ul>
+      </div>
+
       <DialogFooter>
-        <Button onClick={handleSubmit} disabled={loading}>{loading ? "Creando..." : "Crear Producto"}</Button>
+        <Button onClick={handleSubmit} disabled={loading} className="w-full">
+          {loading ? "Creando..." : "Crear Producto"}
+        </Button>
       </DialogFooter>
     </div>
   );
 }
+ 

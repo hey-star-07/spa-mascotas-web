@@ -6,6 +6,9 @@ export interface CreateProductoDTO {
   precioBase: number;
   stockMinimo?: number;
   imagenUrl?: string;
+  esInsumo?: boolean;    
+  esTienda?: boolean;    
+  unidadMedida?: string;
 }
 
 export interface UpdateProductoDTO {

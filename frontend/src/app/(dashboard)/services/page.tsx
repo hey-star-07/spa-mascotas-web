@@ -111,6 +111,11 @@ export default function ServicesPage() {
                           <ClipboardList className="h-3 w-3 mr-1" /> Checklist
                         </Button>
                       </Link>
+
+                      <Link href={`/services/${s.id}/insumos`}>
+                        <Button size="sm" variant="outline">Insumos</Button>
+                      </Link>
+        
                       {/* Botón Editar */}
                       <Button size="sm" variant="outline" onClick={() => { setEditingService(s); setFormData({ nombre: s.nombre, descripcion: s.descripcion || "", duracionBaseMinutos: s.duracionBaseMinutos, precioBase: s.precioBase, factorTamanoRaza: s.factorTamanoRaza }); setDialogOpen(true); }}>
                         <Edit className="h-3 w-3" />

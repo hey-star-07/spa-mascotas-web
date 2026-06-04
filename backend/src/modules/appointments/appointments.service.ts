@@ -4,6 +4,7 @@ import { ErrorCodes } from '../../shared/errors/errorCodes';
 import { CreateAppointmentDTO, UpdateAppointmentDTO, AppointmentFilters } from './appointments.types';
 import { AvailabilityService } from '../availability/availability.service';
 import { ServicesService } from '../services/services.service';
+import { InventoryService } from '../inventory/inventory.service';
 import { format } from 'path/win32';
 
 export class AppointmentsService {
@@ -118,7 +119,6 @@ export class AppointmentsService {
   static async create(data: CreateAppointmentDTO, creadoPorId: number, esSolicitud: boolean = false) {
     const fechaInicio = new Date(data.fechaHoraInicio);
     const duracion = data.duracionEstimadaMinutos;
-    const fechaFin = new Date(fechaInicio.getTime() + duracion * 60000);
 
     // Obtener mascota para calcular ajuste de duración
     const mascota = await prisma.mascota.findUnique({ where: { id: data.mascotaId } });
@@ -136,7 +136,6 @@ export class AppointmentsService {
     );
 
     // Si se asigna groomer, verificar disponibilidad
-    // En el método create, donde se valida disponibilidad:
     if (data.groomerId) {
       const fechaFin = new Date(fechaInicio.getTime() + duracionAjustada * 60000);
       const { available, reason } = await AvailabilityService.isGroomerAvailable(
@@ -146,7 +145,6 @@ export class AppointmentsService {
       );
 
       if (!available) {
-        // 👇 MENSAJE MÁS CLARO
         const mensajes: Record<string, string> = {
           'El groomer no trabaja en este horario': 
             `El groomer no atiende en este horario.`,
@@ -154,6 +152,12 @@ export class AppointmentsService {
             `Conflicto de horario. El groomer ya tiene una cita que se solapa con este servicio de ${duracionAjustada} minutos.`,
           'Capacidad máxima alcanzada':
             'El groomer ya alcanzó su límite máximo de citas simultáneas.',
+          'Límite diario alcanzado':
+            'El groomer ya alcanzó su capacidad máxima de citas para este día.',
+          'Fuera del horario laboral':
+            'El horario seleccionado está fuera del horario de trabajo del groomer.',
+          'Horario ocupado por otra cita':
+            `El groomer ya tiene una cita que se solapa con este servicio de ${duracionAjustada} minutos.`,
         };
 
         const mensajeAmigable = mensajes[reason || ''] || reason || 'Groomer no disponible en este horario';
@@ -162,10 +166,11 @@ export class AppointmentsService {
       }
     }
 
-    return prisma.cita.create({
+    // Crear la cita
+    const cita = await prisma.cita.create({
       data: {
         mascotaId: data.mascotaId,
-        groomerId: data.groomerId || 1, // TODO: asignar automáticamente
+        groomerId: data.groomerId || 1,
         servicioId: data.servicioId,
         fechaHoraInicio: fechaInicio,
         fechaHoraFin: new Date(fechaInicio.getTime() + duracionAjustada * 60000),
@@ -180,6 +185,19 @@ export class AppointmentsService {
         groomer: { include: { usuario: { select: { nombre: true } } } },
       },
     });
+
+    // 👇 ASIGNAR INSUMOS AUTOMÁTICAMENTE (solo si no es solicitud de cliente)
+    if (!esSolicitud && data.groomerId) {
+      try {
+        const resultado = await InventoryService.asignarInsumosAutomaticos(cita.id, creadoPorId);
+        console.log(`📦 Insumos asignados para cita #${cita.id}: ${resultado.mensaje}`);
+      } catch (error) {
+        // No fallar la creación de cita si falla la asignación de insumos
+        console.error('Error asignando insumos automáticos:', error);
+      }
+    }
+
+    return cita;
   }
 
   /**

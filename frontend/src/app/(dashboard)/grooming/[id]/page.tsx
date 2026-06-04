@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/axios";
 import { getImageUrl } from "@/lib/images";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InsumosConfirmacion } from "@/components/inventory/insumos-confirmacion";
+import { InsumosUso } from "@/components/inventory/insumos-uso";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,6 +89,10 @@ export default function FichaTecnicaPage() {
   const [productos, setProductos] = useState<any[]>([]);
   const [addingInsumo, setAddingInsumo] = useState(false);
 
+  const [insumosAsignados, setInsumosAsignados] = useState<any[]>([]);
+  const [todosConfirmados, setTodosConfirmados] = useState(false);
+  const [todosConDestino, setTodosConDestino] = useState(false);
+
   // ============================================
   // CARGA DE DATOS
   // ============================================
@@ -98,6 +104,7 @@ export default function FichaTecnicaPage() {
       setComportamiento(data.data.comportamiento || "");
       setRecomendaciones(data.data.recomendaciones || "");
       setNotasInternas(data.data.notasInternas || "");
+      setInsumosAsignados(data.data.consumoInsumos || []);
     } catch {
       toast.error("Error al cargar ficha");
       router.push("/groomer-dashboard");
@@ -115,6 +122,41 @@ export default function FichaTecnicaPage() {
     loadFicha();
     api.get("/inventory/productos").then(({ data }) => setProductos(data.data || []));
   }, [params.id]);
+
+  // Cargar insumos asignados
+  useEffect(() => {
+    if (ficha?.citaId) {
+      // Cargar insumos asignados
+      api.get(`/inventory/insumos-asignados/${ficha.citaId}`)
+        .then(({ data }) => setInsumosAsignados(data.data || []));
+      
+      // Verificar estado
+      api.get(`/inventory/verificar-insumos/${ficha.citaId}`)
+        .then(({ data }) => {
+          setTodosConfirmados(data.data.todosConfirmados);
+          setTodosConDestino(data.data.todosConDestino);
+        });
+    }
+  }, [ficha?.citaId]);
+
+  const confirmarRecepcion = async (insumoId: number) => {
+    try {
+      await api.put(`/inventory/confirmar-insumo/${insumoId}`);
+      toast.success("Recepción confirmada");
+      // Recargar
+      const { data } = await api.get(`/inventory/insumos-asignados/${ficha?.citaId}`);
+      setInsumosAsignados(data.data || []);
+    } catch { toast.error("Error"); }
+  };
+
+  const registrarUso = async (insumoId: number, estado: string) => {
+    try {
+      await api.put(`/inventory/registrar-uso/${insumoId}`, { estado });
+      toast.success(`Insumo marcado como: ${estado}`);
+      const { data } = await api.get(`/inventory/insumos-asignados/${ficha?.citaId}`);
+      setInsumosAsignados(data.data || []);
+    } catch { toast.error("Error"); }
+  };
 
   // ============================================
   // CHECKLIST
@@ -344,6 +386,74 @@ export default function FichaTecnicaPage() {
         </CardContent></Card>
       </div>
 
+      {/* ============================================ */}
+      {/* PASO 2: CONFIRMAR RECEPCIÓN DE INSUMOS */}
+      {/* ============================================ */}
+      {insumosAsignados.length > 0 && !todosConfirmados && !ficha?.fechaCierre && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Package className="h-5 w-5" /> Confirmar Recepción de Insumos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <InsumosConfirmacion 
+              citaId={ficha.citaId} 
+              onTodosConfirmados={() => setTodosConfirmados(true)} 
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ============================================ */}
+      {/* PASO 3: REGISTRAR USO DE INSUMOS */}
+      {/* ============================================ */}
+      {insumosAsignados.length > 0 && todosConfirmados && !ficha?.fechaCierre && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Package className="h-5 w-5" /> Paso 3: Registrar Uso de Insumos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <InsumosUso 
+              citaId={ficha.citaId} 
+              onTodosRegistrados={() => setTodosConDestino(true)} 
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ============================================ */}
+      {/* INSUMOS CERRADOS (SOLO LECTURA) */}
+      {/* ============================================ */}
+      {ficha?.fechaCierre && insumosAsignados.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Package className="h-5 w-5" /> Insumos del Servicio (Cerrado)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {insumosAsignados.map((insumo) => (
+                <div key={insumo.id} className="flex items-center justify-between p-2 border-2 border-foreground rounded-xl">
+                  <div>
+                    <p className="font-bold text-sm">{insumo.producto.nombre}</p>
+                    <p className="text-xs">Cantidad: {Number(insumo.cantidadAsignada)} uds</p>
+                  </div>
+                  <Badge variant={
+                    insumo.estado === 'usado' ? 'default' :
+                    insumo.estado === 'devuelto' ? 'secondary' : 'destructive'
+                  }>
+                    {insumo.estado === 'usado' ? 'Usado' : insumo.estado === 'devuelto' ? 'Devuelto' : 'Merma'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {/* DATOS MASCOTA */}
       <Card>
         <CardHeader><CardTitle className="text-lg">Datos de la Mascota</CardTitle></CardHeader>
@@ -506,47 +616,6 @@ export default function FichaTecnicaPage() {
                   {uploadingFoto ? "Subiendo..." : "Elegir imagen"}
                 </Button>
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* INSUMOS */}
-      <Card>
-        <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Package className="h-5 w-5" />Insumos del Servicio</CardTitle></CardHeader>
-        <CardContent>
-          {ficha.consumoInsumos.length === 0 ? (
-            <p className="text-sm text-foreground/50 text-center py-4">No se han registrado insumos</p>
-          ) : (
-            <div className="space-y-2 mb-4">
-              {ficha.consumoInsumos.map((insumo) => (
-                <div key={insumo.id} className={`flex items-center justify-between p-2 border-2 border-foreground rounded-xl text-sm ${insumo.devuelto ? "bg-secondary/30" : insumo.merma ? "bg-rose/5" : ""}`}>
-                  <div>
-                    <span className="font-bold">{insumo.producto.nombre}</span>
-                    <span className="ml-2 font-mono">{Number(insumo.cantidad)} uds</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {insumo.devuelto && <Badge variant="secondary" className="text-xs">Devuelto</Badge>}
-                    {insumo.merma && <Badge variant="destructive" className="text-xs">Merma</Badge>}
-                    {!ficha.fechaCierre && (
-                      <div className="flex gap-1">
-                        <Button size="sm" variant={insumo.devuelto ? "default" : "outline"} onClick={() => toggleDevuelto(insumo.id, insumo.devuelto)} className="text-[10px] h-7">Devolver</Button>
-                        <Button size="sm" variant={insumo.merma ? "destructive" : "outline"} onClick={() => toggleMerma(insumo.id, insumo.merma)} className="text-[10px] h-7">Merma</Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {!ficha.fechaCierre && (
-            <div className="flex gap-3 items-end border-t-2 pt-4">
-              <select value={insumoProductoId} onChange={(e) => setInsumoProductoId(e.target.value)} className="h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold flex-1">
-                <option value="">Producto</option>
-                {productos.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </select>
-              <Input type="number" value={insumoCantidad} onChange={(e) => setInsumoCantidad(e.target.value)} placeholder="1.0" className="w-24" />
-              <Button onClick={addInsumo} disabled={addingInsumo} variant="secondary">Agregar</Button>
             </div>
           )}
         </CardContent>

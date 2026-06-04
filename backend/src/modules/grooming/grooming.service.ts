@@ -1,6 +1,10 @@
 import prisma from '../../config/database';
+import { logger } from '../../config/logger';
 import { AppError } from '../../shared/errors/AppError';
 import { ErrorCodes } from '../../shared/errors/errorCodes';
+import { EmailUtils } from '../../shared/utils/email';
+import { InventoryService } from '../inventory/inventory.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CreateFichaDTO, UpdateFichaDTO,
   CreateChecklistDTO, CreateFotoDTO,
@@ -192,7 +196,9 @@ export class GroomingService {
       where: { id: ficha.citaId },
       data: { estado: 'Completada' },
     });
-
+    
+    // PASO 4: Descontar insumos asignados
+    await InventoryService.procesarDescuentoInsumos(ficha.citaId);
     // Descontar insumos
     for (const insumo of ficha.consumoInsumos) {
       if (!insumo.devuelto) {
@@ -209,6 +215,57 @@ export class GroomingService {
           }
         }
       }
+    }
+
+    // En el método cerrarFicha, después de procesar descuento de insumos:
+    // Enviar notificación al cliente
+    try {
+      const fichaConCliente = await prisma.fichaGrooming.findUnique({
+        where: { id },
+        include: {
+          cita: {
+            include: {
+              servicio: {           
+                select: { nombre: true },
+              },
+              mascota: {
+                include: {
+                  cliente: {
+                    include: {
+                      usuario: { select: { id: true, email: true, nombre: true, telefono: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (fichaConCliente?.cita?.mascota?.cliente?.usuario) {
+        const cliente = fichaConCliente.cita.mascota.cliente.usuario;
+        const mascota = fichaConCliente.cita.mascota;
+        
+        // Enviar notificación por email
+        await EmailUtils.sendListoRecogerEmail(
+          cliente.email,
+          cliente.nombre,
+          mascota.nombre,
+          fichaConCliente.cita.servicio?.nombre || 'Servicio de grooming'
+        );
+
+        // Registrar notificación en el sistema
+        await NotificationsService.schedule({
+          usuarioId: cliente.id,
+          tipoEvento: 'LISTO_RECOGER' as any,
+          canal: 'Email' as any,
+          destino: cliente.email,
+          contenido: `¡${mascota.nombre} está lista para recoger! Su servicio de grooming ha finalizado. Puede pasar por Pet Spa.`,
+          fechaProgramacion: new Date(),
+        });
+      }
+    } catch (error) {
+      logger.error('Error enviando notificación de listo para recoger:', error);
     }
 
     return fichaCerrada;

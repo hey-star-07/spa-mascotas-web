@@ -199,4 +199,59 @@ export class EmailUtils {
       // No lanzar error para no interrumpir el flujo de registro
     }
   }
+
+    /**
+   * Envía email de "Listo para recoger"
+   */
+  static async sendListoRecogerEmail(
+    to: string,
+    nombreCliente: string,
+    nombreMascota: string,
+    servicio: string
+  ): Promise<void> {
+    const mailOptions = {
+      from: `"Pet Spa" <${emailConfig.from}>`,
+      to,
+      subject: `¡${nombreMascota} está lista para recoger! - Pet Spa`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background-color: #FFF8F0; border: 3px solid #2D2D2D; border-radius: 16px; padding: 30px;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <span style="font-size: 48px;">🐾</span>
+            <h1 style="color: #2D2D2D; font-size: 24px; margin: 10px 0;">Pet Spa</h1>
+          </div>
+          
+          <h2 style="color: #2D2D2D; font-size: 20px;">¡Listo para recoger!</h2>
+          <p style="font-size: 16px; color: #555;">Hola <strong>${nombreCliente}</strong>,</p>
+          <p style="font-size: 16px; color: #555;">
+            <strong>${nombreMascota}</strong> ya está lista después de su <strong>${servicio}</strong>.
+          </p>
+          
+          <div style="background-color: #A8D5BA; border: 3px solid #2D2D2D; border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center;">
+            <p style="font-size: 18px; font-weight: 900; margin: 0; color: #2D2D2D;">
+              Puedes pasar a recogerla cuando gustes.
+            </p>
+          </div>
+          
+          <p style="font-size: 14px; color: #888;">
+            📍 Estamos ubicados en [DIRECCIÓN DEL SPA]<br>
+            🕐 Horario: Lunes a Viernes 9:00 - 18:00<br>
+            📞 Teléfono: [TELÉFONO]
+          </p>
+          
+          <hr style="border: 2px solid #2D2D2D; margin: 20px 0;">
+          <p style="font-size: 12px; color: #888; text-align: center;">
+            © 2026 Pet Spa. Todos los derechos reservados.<br>
+            Gracias por confiar en nosotros.
+          </p>
+        </div>
+      `,
+    };
+
+    try {
+      await emailTransporter.sendMail(mailOptions);
+      logger.info(`Email "Listo para recoger" enviado a ${to}`);
+    } catch (error) {
+      logger.error(`Error al enviar email a ${to}:`, error);
+    }
+  }
 }

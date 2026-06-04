@@ -3,10 +3,10 @@ import { InventoryService } from './inventory.service';
 import prisma from '../../config/database';
 
 export class InventoryController {
-  // GET /api/inventory/productos
+  // GET /api/inventory/productos (ACTUALIZADO - acepta filtro tipo)
   static async getProductos(req: Request, res: Response, next: NextFunction) {
     try {
-      const productos = await InventoryService.getProductos(req.query as any);
+      const productos = await InventoryService.getAllProductos(req.query as any);
       res.status(200).json({ status: 'success', data: productos, total: productos.length });
     } catch (error) { next(error); }
   }
@@ -73,6 +73,26 @@ export class InventoryController {
     try {
       const result = await InventoryService.registrarMovimiento(req.body);
       res.status(201).json({ status: 'success', ...result });
+    } catch (error) { next(error); }
+  }
+
+  // GET /api/inventory/insumos-servicio/:servicioId
+  static async getInsumosServicio(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await InventoryService.getInsumosSugeridosPorServicio(parseInt(req.params.servicioId));
+      res.status(200).json({ status: 'success', data });
+    } catch (error) { next(error); }
+  }
+
+  // POST /api/inventory/insumos-servicio/:servicioId
+  static async configurarInsumosServicio(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { insumos } = req.body;
+      if (!insumos || !Array.isArray(insumos)) {
+        return res.status(400).json({ status: 'error', message: 'Lista de insumos requerida' });
+      }
+      const data = await InventoryService.configurarInsumosServicio(parseInt(req.params.servicioId), insumos);
+      res.status(201).json({ status: 'success', data, message: `${insumos.length} insumo(s) configurado(s)` });
     } catch (error) { next(error); }
   }
 
@@ -378,6 +398,94 @@ export class InventoryController {
     } catch (error) {
       next(error);
     }
+  }
+
+  // ============================================
+  // INSUMOS ASIGNADOS - PASO 1 AL 5
+  // ============================================
+
+  // GET /api/inventory/insumos-sugeridos/:servicioId
+  static async getInsumosSugeridos(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await InventoryService.getInsumosSugeridos(parseInt(req.params.servicioId));
+      res.status(200).json({ status: 'success', data });
+    } catch (error) { next(error); }
+  }
+
+  // POST /api/inventory/asignar-insumos
+  static async asignarInsumos(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { citaId, insumos } = req.body;
+      if (!citaId || !insumos || !Array.isArray(insumos) || insumos.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'Datos inválidos' });
+      }
+      const data = await InventoryService.asignarInsumos(citaId, insumos, req.user!.userId);
+      res.status(201).json({ status: 'success', data, message: `${insumos.length} insumo(s) asignado(s)` });
+    } catch (error) { next(error); }
+  }
+
+  // GET /api/inventory/insumos-asignados/:citaId
+  static async getInsumosAsignados(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await InventoryService.getInsumosAsignados(parseInt(req.params.citaId));
+      res.status(200).json({ status: 'success', data });
+    } catch (error) { next(error); }
+  }
+
+  // PUT /api/inventory/confirmar-insumo/:id
+  static async confirmarRecepcion(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await InventoryService.confirmarRecepcionInsumo(parseInt(req.params.id), req.user!.userId);
+      res.status(200).json({ status: 'success', data, message: 'Recepción confirmada' });
+    } catch (error) { next(error); }
+  }
+
+  // PUT /api/inventory/registrar-uso/:id
+  static async registrarUso(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { estado, cantidadUsada, observacion } = req.body;
+      if (!['usado', 'devuelto', 'merma'].includes(estado)) {
+        return res.status(400).json({ status: 'error', message: 'Estado inválido. Debe ser: usado, devuelto o merma' });
+      }
+      const data = await InventoryService.registrarUsoInsumo(parseInt(req.params.id), { estado, cantidadUsada, observacion });
+      res.status(200).json({ status: 'success', data, message: `Insumo marcado como: ${estado}` });
+    } catch (error) { next(error); }
+  }
+
+  // GET /api/inventory/verificar-insumos/:citaId
+  static async verificarInsumos(req: Request, res: Response, next: NextFunction) {
+    try {
+      const citaId = parseInt(req.params.citaId);
+      const [confirmados, conDestino] = await Promise.all([
+        InventoryService.verificarInsumosConfirmados(citaId),
+        InventoryService.verificarInsumosConDestino(citaId),
+      ]);
+      res.status(200).json({ status: 'success', data: { todosConfirmados: confirmados, todosConDestino: conDestino } });
+    } catch (error) { next(error); }
+  }
+
+  // GET /api/inventory/catalogo-tienda
+  static async getCatalogoTienda(req: Request, res: Response, next: NextFunction) {
+    try {
+      const productos = await InventoryService.getCatalogoTienda(req.query as any);
+      res.status(200).json({ status: 'success', data: productos });
+    } catch (error) { next(error); }
+  }
+
+  // GET /api/inventory/insumos-tecnicos
+  static async getInsumosTecnicos(req: Request, res: Response, next: NextFunction) {
+    try {
+      const productos = await InventoryService.getInsumosTecnicos(req.query as any);
+      res.status(200).json({ status: 'success', data: productos });
+    } catch (error) { next(error); }
+  }
+
+  // GET /api/inventory/log-completo
+  static async getLogCompleto(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await InventoryService.getLogCompleto(req.query as any);
+      res.status(200).json({ status: 'success', data });
+    } catch (error) { next(error); }
   }
   
 }

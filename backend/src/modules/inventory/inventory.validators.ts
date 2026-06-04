@@ -9,6 +9,9 @@ export const createProductoSchema = z.object({
     precioBase: z.number().min(0, 'Precio no puede ser negativo'),
     stockMinimo: z.number().int().min(0).optional().default(5),
     imagenUrl: z.string().optional(),
+    esInsumo: z.boolean().optional().default(false),
+    esTienda: z.boolean().optional().default(true),
+    unidadMedida: z.string().optional().default('unidad'),
   }),
 });
 

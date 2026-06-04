@@ -11,10 +11,11 @@ import { Scissors, Calendar, ShoppingBag } from "lucide-react";
 import { PawPrint } from "lucide-react";
 import { CalendarPlus, XCircle } from "lucide-react";
 import { Package } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 import { AlertTriangle, Clock} from "lucide-react";
 import { ClipboardList } from "lucide-react";
 import { Box } from "lucide-react";
-import { Receipt } from "lucide-react";
+import { CreditCard } from "lucide-react";
 import { CalendarDays } from "lucide-react";
 import { Tag } from "lucide-react";
 import {
@@ -45,7 +46,12 @@ const menuItems = [
   { href: "/inventory/log", label: "Log de Insumos", icon: ScrollText, roles: ["Admin"] },
   { href: "/store", label: "Tienda", icon: ShoppingBag, roles: ["Cliente", "Admin", "Recepcion"] },
   { href: "/promotions", label: "Promociones", icon: Tag, roles: ["Admin"] },
-  { href: "/billing", label: "Facturación", icon: Receipt, roles: ["Admin", "Recepcion", "Cliente"] },
+  { href: "/billing", label: "Facturación/POS", icon: CreditCard, roles: ["Admin", "Recepcion"] },
+  { href: "/reports", label: "Reportes", icon: BarChart3, roles: ["Admin", "Recepcion"] },
+  // Groomer:
+  { href: "/reports/groomer", label: "Mi Productividad", icon: BarChart3, roles: ["Groomer"] },
+  // Cliente:
+  { href: "/reports/client", label: "Historial", icon: ClipboardList, roles: ["Cliente"] },
   { href: "/settings", label: "Configuración", icon: Settings, roles: ["Admin", "Recepcion", "Groomer", "Cliente"] },
   { href: "/audit-logs", label: "Auditoría", icon: ScrollText, roles: ["Admin"] },
 ];

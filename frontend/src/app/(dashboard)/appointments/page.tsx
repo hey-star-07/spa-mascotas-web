@@ -10,7 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
+import { InsumosAsignacion } from "@/components/inventory/insumos-asignacion";
 import { EmptyState } from "@/components/shared/empty-state";
+import { Package } from "lucide-react";
 import { Calendar, Plus, ChevronLeft, ChevronRight, GripVertical, Dog, Clock, User, AlertTriangle, Check, X } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { toast } from "sonner";
@@ -162,6 +164,8 @@ export default function AppointmentsPage() {
   const [creating, setCreating] = useState(false);
   const [slots, setSlots] = useState<SlotInfo[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [insumosDialogOpen, setInsumosDialogOpen] = useState(false);
+  const [citaRecienCreada, setCitaRecienCreada] = useState<number | null>(null);
   const loadData = async () => {
     setLoading(true);
     try {
@@ -235,7 +239,7 @@ export default function AppointmentsPage() {
     try {
       const fechaHoraInicio = `${selectedDate}T${selectedHour}:00`;
       const servicio = services.find(s => s.id.toString() === formData.servicioId);
-      await api.post("/appointments", {
+      const response = await api.post("/appointments", {
         mascotaId: parseInt(formData.mascotaId),
         servicioId: parseInt(formData.servicioId),
         groomerId: selectedGroomer.groomer?.id || selectedGroomer.id,
@@ -243,6 +247,9 @@ export default function AppointmentsPage() {
         duracionEstimadaMinutos: servicio?.duracionBaseMinutos || 30,
       });
       toast.success("Cita creada exitosamente");
+          // PREGUNTAR SI QUIERE ASIGNAR INSUMOS
+      setCitaRecienCreada(response.data.data.id);
+      setInsumosDialogOpen(true);
       setDialogOpen(false);
       loadData();
     } catch (error: any) {
@@ -265,8 +272,6 @@ export default function AppointmentsPage() {
   for (let h = 9; h <= 17; h++) {
     hours.push(`${h.toString().padStart(2, "0")}:00`);
   }
-
-
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -456,6 +461,32 @@ export default function AppointmentsPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleCreateAppointment} disabled={creating}>
               {creating ? "Creando..." : "Asignar Cita"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo Asignar Insumos */}
+      <Dialog open={insumosDialogOpen} onOpenChange={setInsumosDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" /> Asignar Insumos al Groomer
+            </DialogTitle>
+          </DialogHeader>
+          {citaRecienCreada && (
+            <InsumosAsignacion
+              citaId={citaRecienCreada}
+              servicioId={parseInt(formData.servicioId)}
+              onSave={() => {
+                setInsumosDialogOpen(false);
+                toast.success("Insumos asignados correctamente");
+              }}
+            />
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInsumosDialogOpen(false)}>
+              Omitir (asignar después)
             </Button>
           </DialogFooter>
         </DialogContent>
