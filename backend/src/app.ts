@@ -30,7 +30,11 @@ const app: Application = express();
 // ============================================
 
 // Seguridad HTTP headers
-app.use(helmet());
+// Se configura helmet sin bloquear imágenes cross-origin (frontend corre en otro puerto)
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // permite que el frontend cargue imágenes
+  contentSecurityPolicy: false, // evita bloqueos en desarrollo
+}));
 
 // CORS
 app.use(cors({
@@ -52,7 +56,13 @@ app.use(morgan('combined', {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Servir imágenes estáticas — CORS abierto para que el frontend en otro puerto pueda cargarlas
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+}, express.static(path.join(__dirname, '../uploads')));
+
 // ============================================
 // RUTAS
 // ============================================

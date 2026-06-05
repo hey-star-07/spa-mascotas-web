@@ -79,16 +79,25 @@ export class BillingService {
   static async createFactura(data: CreateFacturaDTO) {
     const numeroFactura = await this.generarNumeroFactura();
 
+    // 👇 Si recibimos usuarioId, buscar el clienteId real
+    let clienteId = data.clienteId;
+    
+    // Verificar si el ID es de usuario en lugar de cliente
+    const cliente = await prisma.cliente.findUnique({ where: { usuarioId: data.clienteId } });
+    if (cliente) {
+      clienteId = cliente.id; // Usar el ID de la tabla clientes
+    }
+
     const factura = await prisma.factura.create({
       data: {
         numeroFactura,
-        citaId: data.citaId,
-        pedidoId: data.pedidoId,
-        clienteId: data.clienteId,
+        citaId: data.citaId || null,
+        pedidoId: data.pedidoId || null,
+        clienteId: clienteId,  // 👈 ID correcto de la tabla clientes
         subtotal: data.subtotal,
         impuesto: data.impuesto || 0,
         total: data.total,
-        metodoPago: data.metodoPago,
+        metodoPago: data.metodoPago || null,
         estado: 'Pendiente',
       },
       include: {

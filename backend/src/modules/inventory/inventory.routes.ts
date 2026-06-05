@@ -56,4 +56,9 @@ router.get('/productos', authenticate, InventoryController.getProductos);
 // Log de insumos
 router.get('/log-insumos', authenticate, authorize('Admin'), InventoryController.getLogInsumos);
 router.get('/log-insumos/resumen', authenticate, authorize('Admin'), InventoryController.getResumenPorGroomer);
+
+// Categorías
+router.get('/categorias', authenticate, InventoryController.getCategorias);
+router.post('/categorias', authenticate, authorize('Admin'), InventoryController.createCategoria);
+
 export default router;

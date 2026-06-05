@@ -62,6 +62,23 @@ export class BillingController {
     } catch (error) { next(error); }
   }
 
+  /**
+ * GET /api/billing/qr-imagen
+ * Devuelve la URL de la imagen QR configurada
+ */
+  static async getQRImagen(req: Request, res: Response, next: NextFunction) {
+    try {
+      const qrPath = '/uploads/qr.jpeg';
+      res.status(200).json({ 
+        status: 'success', 
+        data: { 
+          qrUrl: qrPath,
+          mensaje: 'Escanea este QR para realizar el pago'
+        } 
+      });
+    } catch (error) { next(error); }
+  }
+
   // GET /api/billing/cierre-caja
   static async getCierreCaja(req: Request, res: Response, next: NextFunction) {
     try {

@@ -102,7 +102,10 @@ export default function InventoryPage() {
                 <div key={a.id} className="p-3 border-2 border-rose rounded-xl bg-white">
                   <p className="font-extrabold text-sm">{a.nombre}</p>
                   <p className="text-xs">SKU: {a.sku}</p>
-                  <p className="text-xs text-rose font-bold mt-1">Stock: {a.stockActual} / Mín: {a.stockMinimo}{a.stockActual === 0 && " - ¡AGOTADO!"}</p>
+                  <p className="text-xs text-rose font-bold mt-1">
+                    Stock: {a.stockActual} / Mín: {a.stockMinimo}
+                    {a.stockActual === 0 && " - ¡AGOTADO!"}
+                  </p>
                 </div>
               ))}
             </div>
@@ -119,15 +122,6 @@ export default function InventoryPage() {
           <AlertTriangle className="mr-2 h-4 w-4" /> Bajo Stock
         </Button>
       </div>
-      <Button variant="outline" className="relative" onClick={() => window.location.href = '/inventory/alerts'}>
-        <AlertTriangle className="mr-2 h-4 w-4" />
-        Ver Alertas
-        {alertas.length > 0 && (
-          <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-[10px]">
-            {alertas.length}
-          </Badge>
-        )}
-      </Button>
 
       {productos.length === 0 ? (
         <EmptyState icon={<Package className="h-12 w-12" />} title="Sin productos" description="No se encontraron productos" />
@@ -135,9 +129,11 @@ export default function InventoryPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {productos.map((p) => {
             const stock = getStockTotal(p);
-            const bajo = stock <= p.stockMinimo;
+            // FIX: alerta solo cuando está ESTRICTAMENTE por debajo del mínimo, no cuando es igual
+            const bajo = stock < p.stockMinimo;
+            const enMinimo = stock === p.stockMinimo;
             return (
-              <Card key={p.id} className={`hover:shadow-cartoon-hover transition-all overflow-hidden ${bajo ? "border-rose bg-rose/5" : ""} ${p.activo === false ? "opacity-50" : ""}`}>
+              <Card key={p.id} className={`hover:shadow-cartoon-hover transition-all overflow-hidden ${bajo ? "border-rose bg-rose/5" : enMinimo ? "border-amber-400 bg-amber-50" : ""} ${p.activo === false ? "opacity-50" : ""}`}>
                 <div className="h-40 bg-secondary flex items-center justify-center border-b-3 border-foreground relative">
                   {p.imagenUrl ? (
                     <img src={getImageUrl(p.imagenUrl) || ''} alt={p.nombre} className="w-full h-full object-cover" />
@@ -148,6 +144,7 @@ export default function InventoryPage() {
                     </div>
                   )}
                   {bajo && <Badge variant="destructive" className="absolute top-2 right-2">{stock === 0 ? "¡AGOTADO!" : "Bajo"}</Badge>}
+                  {enMinimo && <Badge className="absolute top-2 right-2 bg-amber-500 text-white border-0">En mínimo</Badge>}
                 </div>
                 <CardContent className="pt-4 space-y-3">
                   <div>
@@ -156,7 +153,10 @@ export default function InventoryPage() {
                   </div>
                   {p.categoria && <Badge variant="outline" className="text-xs">{p.categoria.nombre}</Badge>}
                   <div className="space-y-1.5">
-                    <div className="flex justify-between text-sm"><span className="text-foreground/70">Stock:</span><span className={`font-extrabold ${bajo ? "text-rose" : "text-primary"}`}>{stock} uds</span></div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-foreground/70">Stock:</span>
+                      <span className={`font-extrabold ${bajo ? "text-rose" : enMinimo ? "text-amber-600" : "text-primary"}`}>{stock} uds</span>
+                    </div>
                     <div className="flex justify-between text-sm"><span className="text-foreground/70">Mínimo:</span><span className="font-semibold">{p.stockMinimo} uds</span></div>
                     <div className="flex justify-between text-sm"><span className="text-foreground/70">Precio:</span><span className="font-bold text-lg">Bs. {Number(p.precioBase).toFixed(2)}</span></div>
                   </div>
@@ -196,15 +196,35 @@ export default function InventoryPage() {
 }
 
 function NuevoProductoForm({ onSuccess }: { onSuccess: () => void }) {
-  const [form, setForm] = useState({ sku: "", nombre: "", descripcion: "", precioBase: 0, stockMinimo: 5, imagenUrl: "", esInsumo: false, esTienda: true, unidadMedida: "unidad", categoriaId: "", });
+  const [form, setForm] = useState({
+    sku: "",
+    nombre: "",
+    descripcion: "",
+    precioBase: 0,
+    stockInicial: 10,   // <-- stock real con el que se abre el producto
+    stockMinimo: 5,     // <-- umbral de alerta
+    imagenUrl: "",
+    esInsumo: false,
+    esTienda: true,
+    unidadMedida: "unidad",
+    categoriaId: "",
+  });
   const [loading, setLoading] = useState(false);
   const [categorias, setCategorias] = useState<any[]>([]);
 
   useEffect(() => {
-    api.get("/inventory/categorias").then(({ data }) => setCategorias(data.data || [])).catch(() => {});
+    api.get("/inventory/categorias")
+      .then(({ data }) => setCategorias(data.data || []))
+      .catch(() => {});
   }, []);
 
   const handleSubmit = async () => {
+    if (!form.sku.trim()) { toast.error("El SKU es obligatorio"); return; }
+    if (!form.nombre.trim()) { toast.error("El nombre es obligatorio"); return; }
+    if (form.precioBase <= 0) { toast.error("El precio debe ser mayor a 0"); return; }
+    if (form.stockInicial < 0) { toast.error("El stock inicial no puede ser negativo"); return; }
+    if (form.stockMinimo < 0) { toast.error("El stock mínimo no puede ser negativo"); return; }
+
     setLoading(true);
     try {
       await api.post("/inventory/productos", {
@@ -217,6 +237,9 @@ function NuevoProductoForm({ onSuccess }: { onSuccess: () => void }) {
       toast.error(error.response?.data?.message || "Error al crear producto");
     } finally { setLoading(false); }
   };
+
+  const alertaPreview = form.stockInicial < form.stockMinimo;
+  const enMinimoPreview = form.stockInicial === form.stockMinimo;
 
  return (
     <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
@@ -267,7 +290,7 @@ function NuevoProductoForm({ onSuccess }: { onSuccess: () => void }) {
         </div>
       </div>
 
-      {/* Categoría */}
+      {/* Categoría — cargada desde la BD */}
       <div>
         <Label>Categoría</Label>
         <select
@@ -276,11 +299,9 @@ function NuevoProductoForm({ onSuccess }: { onSuccess: () => void }) {
           className="w-full h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold"
         >
           <option value="">Sin categoría</option>
-          <option value="1">Alimentos</option>
-          <option value="2">Accesorios</option>
-          <option value="3">Higiene</option>
-          <option value="4">Juguetes</option>
-          <option value="5">Salud</option>
+          {categorias.map(c => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
         </select>
       </div>
 
@@ -311,7 +332,7 @@ function NuevoProductoForm({ onSuccess }: { onSuccess: () => void }) {
           onUpload={(url) => setForm({...form, imagenUrl: url})}
         />
         {form.imagenUrl && (
-          <p className="text-xs text-primary mt-1 font-semibold">Imagen cargada</p>
+          <p className="text-xs text-primary mt-1 font-semibold">✓ Imagen cargada</p>
         )}
       </div>
 
@@ -326,34 +347,79 @@ function NuevoProductoForm({ onSuccess }: { onSuccess: () => void }) {
         />
       </div>
 
-      {/* Precio y stock */}
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label>Precio Base (Bs.)</Label>
-          <Input type="number" value={form.precioBase} onChange={e => setForm({...form, precioBase: parseFloat(e.target.value) || 0})} />
-        </div>
-        <div>
-          <Label>Stock Mínimo</Label>
-          <Input type="number" value={form.stockMinimo} onChange={e => setForm({...form, stockMinimo: parseInt(e.target.value) || 0})} />
-        </div>
+      {/* Precio */}
+      <div>
+        <Label>Precio Base (Bs.) *</Label>
+        <Input
+          type="number"
+          min={0}
+          step={0.5}
+          value={form.precioBase}
+          onChange={e => setForm({...form, precioBase: parseFloat(e.target.value) || 0})}
+        />
       </div>
 
-      {/* Resumen de lo que se creará */}
+      {/* Stock — separado claramente en dos campos */}
+      <div className="bg-secondary/30 rounded-xl p-3 space-y-3">
+        <Label className="text-sm font-extrabold block">Stock</Label>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs">Stock Inicial <span className="text-foreground/50">(unidades que tienes ahora)</span></Label>
+            <Input
+              type="number"
+              min={0}
+              value={form.stockInicial}
+              onChange={e => setForm({...form, stockInicial: parseInt(e.target.value) || 0})}
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Stock Mínimo <span className="text-foreground/50">(umbral de alerta)</span></Label>
+            <Input
+              type="number"
+              min={0}
+              value={form.stockMinimo}
+              onChange={e => setForm({...form, stockMinimo: parseInt(e.target.value) || 0})}
+            />
+          </div>
+        </div>
+        {/* Preview del estado de stock */}
+        {alertaPreview && (
+          <p className="text-xs font-bold text-rose flex items-center gap-1">
+            <AlertTriangle className="h-3 w-3" /> El stock inicial está por debajo del mínimo — se creará con alerta activa.
+          </p>
+        )}
+        {enMinimoPreview && !alertaPreview && (
+          <p className="text-xs font-bold text-amber-600 flex items-center gap-1">
+            ⚠️ El stock inicial es igual al mínimo — se mostrará como "En mínimo" (sin alerta roja).
+          </p>
+        )}
+        {!alertaPreview && !enMinimoPreview && form.stockInicial > 0 && (
+          <p className="text-xs font-semibold text-primary flex items-center gap-1">
+            ✓ Stock saludable — {form.stockInicial} uds disponibles, alerta a partir de {form.stockMinimo} uds.
+          </p>
+        )}
+      </div>
+
+      {/* Resumen */}
       <div className="bg-secondary/30 rounded-xl p-3 text-xs">
         <p className="font-bold mb-1">Se creará:</p>
-        <ul className="space-y-0.5">
-          {form.esTienda && <li>Producto de tienda - Visible en catálogo</li>}
-          {form.esInsumo && <li>Insumo técnico - Asignable a groomers</li>}
+        <ul className="space-y-0.5 text-foreground/70">
+          {form.esTienda && <li>✓ Producto de tienda — visible en catálogo para clientes</li>}
+          {form.esInsumo && <li>✓ Insumo técnico — asignable a sesiones de grooming</li>}
+          {!form.esTienda && !form.esInsumo && <li className="text-rose font-bold">⚠ Selecciona al menos un tipo de producto</li>}
           {form.esTienda && form.esInsumo && <li className="text-primary font-bold">Stock compartido entre tienda e insumos</li>}
         </ul>
       </div>
 
       <DialogFooter>
-        <Button onClick={handleSubmit} disabled={loading} className="w-full">
+        <Button
+          onClick={handleSubmit}
+          disabled={loading || (!form.esTienda && !form.esInsumo)}
+          className="w-full"
+        >
           {loading ? "Creando..." : "Crear Producto"}
         </Button>
       </DialogFooter>
     </div>
   );
 }
- 

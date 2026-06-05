@@ -4,6 +4,7 @@ export interface CreateProductoDTO {
   descripcion?: string;
   categoriaId?: number;
   precioBase: number;
+  stockInicial?: number;
   stockMinimo?: number;
   imagenUrl?: string;
   esInsumo?: boolean;    

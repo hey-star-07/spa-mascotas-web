@@ -29,11 +29,11 @@ export class InventoryService {
       orderBy: { nombre: 'asc' },
     });
 
-    // Si se pide solo bajo stock
+    // Si se pide solo bajo stock — estrictamente menor al mínimo
     if (params?.bajoStock) {
       return productos.filter(p => {
         const stockVariantes = p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0);
-        return stockVariantes <= p.stockMinimo;
+        return stockVariantes < p.stockMinimo;
       });
     }
 
@@ -85,7 +85,8 @@ export class InventoryService {
       },
     });
 
-    // Crear variante por defecto
+    // Crear variante por defecto con el stock INICIAL real (no el mínimo)
+    const stockInicial = data.stockInicial ?? data.stockMinimo ?? 5;
     await prisma.varianteProducto.create({
       data: {
         productoId: producto.id,
@@ -93,7 +94,7 @@ export class InventoryService {
         valor: 'Estandar',
         skuVariante: `${data.sku}-STD`,
         precioExtra: 0,
-        stockAdicional: data.stockMinimo || 5,
+        stockAdicional: stockInicial,
       },
     });
 
@@ -137,7 +138,8 @@ export class InventoryService {
 
     return productos.filter(p => {
       const stockTotal = p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0);
-      return stockTotal <= p.stockMinimo;
+      // Alerta solo cuando el stock está ESTRICTAMENTE por debajo del mínimo
+      return stockTotal < p.stockMinimo;
     }).map(p => ({
       id: p.id,
       nombre: p.nombre,
@@ -625,7 +627,7 @@ static async getInsumosSugeridos(servicioId: number) {
     if (params?.bajoStock) {
       return productos.filter(p => {
         const stockTotal = p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0);
-        return stockTotal <= p.stockMinimo;
+        return stockTotal < p.stockMinimo;
       });
     }
 
@@ -749,4 +751,20 @@ static async configurarInsumosServicio(
       insumos: asignados,
     };
   }
+
+  // ============================================
+  // CATEGORÍAS
+  // ============================================
+
+  static async getCategorias() {
+    return prisma.categoria.findMany({
+      orderBy: { nombre: 'asc' },
+      select: { id: true, nombre: true, descripcion: true },
+    });
+  }
+
+  static async createCategoria(data: { nombre: string; descripcion?: string }) {
+    return prisma.categoria.create({ data });
+  }
+
 }

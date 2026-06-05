@@ -199,24 +199,6 @@ export class GroomingService {
     
     // PASO 4: Descontar insumos asignados
     await InventoryService.procesarDescuentoInsumos(ficha.citaId);
-    // Descontar insumos
-    for (const insumo of ficha.consumoInsumos) {
-      if (!insumo.devuelto) {
-        if (insumo.varianteId) {
-          const variante = await prisma.varianteProducto.findUnique({
-            where: { id: insumo.varianteId },
-          });
-          if (variante) {
-            const nuevoStock = Math.max(0, variante.stockAdicional - Number(insumo.cantidad));
-            await prisma.varianteProducto.update({
-              where: { id: insumo.varianteId },
-              data: { stockAdicional: nuevoStock },
-            });
-          }
-        }
-      }
-    }
-
     // En el método cerrarFicha, después de procesar descuento de insumos:
     // Enviar notificación al cliente
     try {

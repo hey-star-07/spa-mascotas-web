@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { Upload, X, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/axios";
+import { getImageUrl } from "@/lib/images";
 import { toast } from "sonner";
 
 interface ImageUploadProps {
@@ -14,7 +15,9 @@ interface ImageUploadProps {
 }
 
 export function ImageUpload({ onUpload, currentImage, label = "Subir imagen", className }: ImageUploadProps) {
-  const [preview, setPreview] = useState<string | null>(currentImage || null);
+  const [preview, setPreview] = useState<string | null>(
+    currentImage ? (getImageUrl(currentImage) || currentImage) : null
+  );
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -22,7 +25,7 @@ export function ImageUpload({ onUpload, currentImage, label = "Subir imagen", cl
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Previsualizar
+    // Previsualizar localmente con FileReader (blob URL)
     const reader = new FileReader();
     reader.onload = (e) => setPreview(e.target?.result as string);
     reader.readAsDataURL(file);
@@ -37,8 +40,9 @@ export function ImageUpload({ onUpload, currentImage, label = "Subir imagen", cl
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      const imageUrl = `http://localhost:3000${data.data.url}`;
-      onUpload(imageUrl);
+      // Guardar SOLO la ruta relativa (/uploads/xxx) — nunca el host hardcodeado
+      const relativeUrl: string = data.data.url; // e.g. "/uploads/uuid.jpg"
+      onUpload(relativeUrl);
       toast.success('Imagen subida exitosamente');
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Error al subir imagen');

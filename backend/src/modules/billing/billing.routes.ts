@@ -11,6 +11,7 @@ const router = Router();
 router.get('/facturas', authenticate, authorize('Admin', 'Recepcion'), BillingController.getAll);
 router.get('/facturas/mis-facturas', authenticate, authorize('Cliente'), BillingController.getMyFacturas);
 router.get('/facturas/:id', authenticate, BillingController.getById);
+router.get('/qr-imagen', authenticate, BillingController.getQRImagen);
 router.get('/facturas/:id/qr', authenticate, authorize('Admin', 'Recepcion'), BillingController.generarQR);
 router.get('/cierre-caja', authenticate, authorize('Admin', 'Recepcion'), BillingController.getCierreCaja);
 

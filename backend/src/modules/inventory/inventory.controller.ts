@@ -6,7 +6,14 @@ export class InventoryController {
   // GET /api/inventory/productos (ACTUALIZADO - acepta filtro tipo)
   static async getProductos(req: Request, res: Response, next: NextFunction) {
     try {
-      const productos = await InventoryService.getAllProductos(req.query as any);
+      const { search, tipo, categoriaId, bajoStock } = req.query as any;
+      const productos = await InventoryService.getAllProductos({
+        search,
+        tipo,
+        categoriaId: categoriaId ? parseInt(categoriaId) : undefined,
+        // req.query siempre llega como string — convertir explicitamente a booleano
+        bajoStock: bajoStock === 'true' || bajoStock === true,
+      });
       res.status(200).json({ status: 'success', data: productos, total: productos.length });
     } catch (error) { next(error); }
   }
@@ -488,4 +495,25 @@ export class InventoryController {
     } catch (error) { next(error); }
   }
   
+
+  // GET /api/inventory/categorias
+  static async getCategorias(req: Request, res: Response, next: NextFunction) {
+    try {
+      const categorias = await InventoryService.getCategorias();
+      res.status(200).json({ status: 'success', data: categorias });
+    } catch (error) { next(error); }
+  }
+
+  // POST /api/inventory/categorias
+  static async createCategoria(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { nombre, descripcion } = req.body;
+      if (!nombre?.trim()) {
+        return res.status(400).json({ status: 'error', message: 'El nombre es requerido' });
+      }
+      const categoria = await InventoryService.createCategoria({ nombre, descripcion });
+      res.status(201).json({ status: 'success', data: categoria });
+    } catch (error) { next(error); }
+  }
+
 }

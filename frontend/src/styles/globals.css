@@ -40,4 +40,21 @@
     @apply border-3 border-foreground shadow-cartoon
            rounded-2xl bg-white p-6;
   }
+
+  @media print {
+    body * {
+      visibility: hidden;
+    }
+    #recibo-impresion, #recibo-impresion * {
+      visibility: visible;
+    }
+    #recibo-impresion {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      max-width: 300px;
+      margin: 0 auto;
+    }
+  }
 }

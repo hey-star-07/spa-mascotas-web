@@ -412,7 +412,7 @@ export default function FichaTecnicaPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Package className="h-5 w-5" /> Paso 3: Registrar Uso de Insumos
+              <Package className="h-5 w-5" />Registrar Uso de Insumos
             </CardTitle>
           </CardHeader>
           <CardContent>

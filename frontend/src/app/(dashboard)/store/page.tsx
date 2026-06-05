@@ -30,6 +30,7 @@ export default function StorePage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [cartCount, setCartCount] = useState(0);
+  const [cantidad, setCantidad] = useState(1);
 
   useEffect(() => {
     loadProductos();
@@ -51,14 +52,20 @@ export default function StorePage() {
     } catch {}
   };
 
-  const addToCart = async (productoId: number, varianteId?: number) => {
+  const addToCart = async (productoId: number, varianteId?: number, cant: number = 1) => {
     try {
-      await api.post("/store/cart", { productoId, varianteId, cantidad: 1 });
+      await api.post("/store/cart", { productoId, varianteId, cantidad: cant });
       toast.success("Agregado al carrito");
+      setCantidad(1); // Resetear
       loadCartCount();
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Error");
     }
+  };
+
+  // 👇 Función helper para calcular stock total
+  const getStockTotal = (producto: Producto): number => {
+    return producto.variantes?.reduce((sum, v) => sum + v.stockAdicional, 0) || 0;
   };
 
   if (loading) return <LoadingSpinner text="Cargando tienda..." />;
@@ -95,37 +102,88 @@ export default function StorePage() {
         <EmptyState icon={<Package className="h-12 w-12" />} title="Sin productos" description="No se encontraron productos" />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {productos.map((p) => (
-            <Card key={p.id} className="hover:shadow-cartoon-hover transition-all overflow-hidden">
-              {/* Imagen */}
-              <div className="h-48 bg-secondary flex items-center justify-center border-b-3 border-foreground relative">
-                {p.imagenUrl ? (
-                  <img src={getImageUrl(p.imagenUrl) || ''} alt={p.nombre} className="w-full h-full object-cover" />
-                ) : (
-                  <Package className="h-16 w-16 text-foreground/30" />
-                )}
-                {p.categoria && (
-                  <Badge className="absolute top-2 left-2 text-[10px]">{p.categoria.nombre}</Badge>
-                )}
-              </div>
-              <CardContent className="pt-4 space-y-3">
-                <div>
-                  <h3 className="font-extrabold text-lg truncate">{p.nombre}</h3>
-                  <p className="text-xs text-foreground/50">{p.sku}</p>
+          {productos.map((p) => {
+            const stockTotal = getStockTotal(p); // 👈 Calcular stock por producto
+            return (
+              <Card key={p.id} className="hover:shadow-cartoon-hover transition-all overflow-hidden">
+                {/* Imagen */}
+                <div className="h-48 bg-secondary flex items-center justify-center border-b-3 border-foreground relative">
+                  {p.imagenUrl ? (
+                    <img src={getImageUrl(p.imagenUrl) || ''} alt={p.nombre} className="w-full h-full object-cover" />
+                  ) : (
+                    <Package className="h-16 w-16 text-foreground/30" />
+                  )}
+                  {p.categoria && (
+                    <Badge className="absolute top-2 left-2 text-[10px]">{p.categoria.nombre}</Badge>
+                  )}
+                  {stockTotal === 0 && (
+                    <div className="absolute inset-0 bg-foreground/50 flex items-center justify-center">
+                      <Badge variant="destructive" className="text-sm px-3 py-1">AGOTADO</Badge>
+                    </div>
+                  )}
+                  {stockTotal > 0 && stockTotal <= 5 && (
+                    <Badge variant="destructive" className="absolute top-2 right-2 text-[10px]">
+                      Solo {stockTotal}
+                    </Badge>
+                  )}
                 </div>
-                {p.descripcion && <p className="text-xs line-clamp-2">{p.descripcion}</p>}
-                <div className="flex items-center justify-between">
-                  <p className="text-xl font-extrabold">Bs. {Number(p.precioBase).toFixed(2)}</p>
-                  <Button size="sm" variant="accent" onClick={() => addToCart(p.id, p.variantes[0]?.id)}>
-                    <Plus className="h-4 w-4 mr-1" /> Agregar
-                  </Button>
-                </div>
-                {p.variantes.length > 1 && (
-                  <p className="text-[10px] text-foreground/50">{p.variantes.length} variantes disponibles</p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                <CardContent className="pt-4 space-y-3">
+                  <div>
+                    <h3 className="font-extrabold text-lg truncate">{p.nombre}</h3>
+                    <p className="text-xs text-foreground/50">{p.sku}</p>
+                  </div>
+                  {p.descripcion && (
+                    <p className="text-xs text-foreground/70 line-clamp-2">{p.descripcion}</p>
+                  )}
+                  
+                  {/* Precio y stock */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xl font-extrabold">Bs. {Number(p.precioBase).toFixed(2)}</p>
+                      <p className="text-[10px] text-foreground/50">
+                        Stock: {stockTotal} uds
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Selector de cantidad y botón agregar */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <div className="flex items-center border-2 border-foreground rounded-lg">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setCantidad(Math.max(1, cantidad - 1)); }}
+                        className="px-2 py-1 text-sm font-bold hover:bg-primary/20 transition-colors"
+                        disabled={stockTotal === 0}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </button>
+                      <span className="px-2 py-1 text-sm font-bold min-w-[30px] text-center">{cantidad}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setCantidad(Math.min(stockTotal, cantidad + 1)); }}
+                        className="px-2 py-1 text-sm font-bold hover:bg-primary/20 transition-colors"
+                        disabled={stockTotal === 0 || cantidad >= stockTotal}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="accent"
+                      onClick={() => addToCart(p.id, p.variantes[0]?.id, cantidad)}
+                      disabled={stockTotal === 0}
+                      className="flex-shrink-0"
+                    >
+                      <ShoppingCart className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {/* Variantes */}
+                  {p.variantes.length > 1 && (
+                    <p className="text-[10px] text-foreground/50">{p.variantes.length} variantes disponibles</p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

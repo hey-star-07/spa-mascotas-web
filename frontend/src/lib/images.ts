@@ -1,27 +1,29 @@
 /**
- * Obtiene la URL completa de una imagen
- * Si la URL ya es completa (http), la devuelve tal cual
- * Si es una ruta relativa (/uploads/...), le agrega la URL del backend
+ * Obtiene la URL base del backend (sin /api)
+ * NEXT_PUBLIC_API_URL puede ser "http://localhost:3000/api" o "http://localhost:3000"
+ */
+function getBackendBaseUrl(): string {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+  // Quitar el sufijo /api si existe, para llegar a la raíz del servidor
+  return apiUrl.replace(/\/api\/?$/, '');
+}
+
+/**
+ * Obtiene la URL completa de una imagen.
+ * - Si la URL ya es absoluta (http/https), la devuelve tal cual.
+ * - Si es una ruta relativa (/uploads/...), le agrega la URL BASE del backend (sin /api).
  */
 export function getImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith('http')) return url;
-  
-  // Si ya incluye localhost, devolver tal cual
-  if (url.includes('localhost')) return url;
-  
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-  
-  // Si la URL ya empieza con /uploads, agregar el backend
-  if (url.startsWith('/uploads')) {
-    return `${API_URL}${url}`;
+
+  // Ya es una URL absoluta, devolverla tal cual
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
   }
-  
-  // Si empieza con /api, es una URL de API, devolver con backend
-  if (url.startsWith('/api')) {
-    return `${API_URL}${url}`;
-  }
-  
-  // Para cualquier otra ruta relativa
-  return `${API_URL}/${url}`;
+
+  const baseUrl = getBackendBaseUrl();
+
+  // Ruta relativa: /uploads/xxx o uploads/xxx
+  const cleanPath = url.startsWith('/') ? url : `/${url}`;
+  return `${baseUrl}${cleanPath}`;
 }
