@@ -319,17 +319,19 @@ export class ReportsService {
     const mascotas = await prisma.mascota.findMany({
       where: { clienteId },
       include: {
-        citas: {
-          include: {
-            servicio: { select: { nombre: true } },
-            fichaGrooming: {
-              include: {
-                fotos: { select: { tipo: true, urlFoto: true } },
-              },
+      citas: {
+        include: {
+          servicio: { select: { nombre: true } },
+          fichaGrooming: {
+            select: {
+              fotos: { select: { tipo: true, urlFoto: true } },
+              recomendaciones: true,  
+              estadoIngreso: true,    
             },
           },
-          orderBy: { fechaHoraInicio: 'desc' },
         },
+        orderBy: { fechaHoraInicio: 'desc' },
+      },
       },
     });
 
@@ -350,6 +352,8 @@ export class ReportsService {
           fecha: c.fechaHoraInicio.toISOString(),
           servicio: c.servicio.nombre,
           estado: c.estado,
+          recomendaciones: c.fichaGrooming?.recomendaciones || null, 
+          estadoIngreso: c.fichaGrooming?.estadoIngreso || null,      
         })),
       })),
     };

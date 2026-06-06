@@ -6,6 +6,8 @@ import { AvailabilityService } from '../availability/availability.service';
 import { ServicesService } from '../services/services.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { format } from 'path/win32';
+import { logger } from '../../config/logger';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export class AppointmentsService {
   /**
@@ -185,6 +187,13 @@ export class AppointmentsService {
         groomer: { include: { usuario: { select: { nombre: true } } } },
       },
     });
+
+    // Programar recordatorios automáticos
+    try {
+      await NotificationsService.programarRecordatoriosCita(cita.id);
+    } catch (error) {
+      logger.error('Error programando recordatorios:', error);
+    }
 
     // 👇 ASIGNAR INSUMOS AUTOMÁTICAMENTE (solo si no es solicitud de cliente)
     if (!esSolicitud && data.groomerId) {

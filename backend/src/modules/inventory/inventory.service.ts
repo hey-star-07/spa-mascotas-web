@@ -767,4 +767,83 @@ static async configurarInsumosServicio(
     return prisma.categoria.create({ data });
   }
 
+    // ============================================
+  // ALERTAS SEPARADAS POR TIPO
+  // ============================================
+
+  // Alertas de bajo stock para TIENDA
+  static async getAlertasTienda() {
+    const productos = await prisma.producto.findMany({
+      where: { activo: true, esTienda: true },
+      include: { variantes: true },
+    });
+
+    return productos
+      .filter(p => {
+        const stockTotal = p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0);
+        return stockTotal <= p.stockMinimo;
+      })
+      .map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        sku: p.sku,
+        tipo: 'tienda',
+        stockActual: p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0),
+        stockMinimo: p.stockMinimo,
+        porcentaje: p.stockMinimo > 0 
+          ? Math.round((p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0) / p.stockMinimo) * 100) 
+          : 0,
+        urgencia: p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0) === 0 
+          ? 'Crítica' 
+          : p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0) <= p.stockMinimo * 0.5 
+          ? 'Alta' 
+          : 'Media',
+        variantes: p.variantes.map(v => ({
+          id: v.id,
+          atributo: v.atributo,
+          valor: v.valor,
+          stockAdicional: v.stockAdicional,
+        })),
+      }))
+      .sort((a, b) => a.porcentaje - b.porcentaje);
+  }
+
+  // Alertas de bajo stock para INSUMOS TÉCNICOS
+  static async getAlertasInsumos() {
+    const productos = await prisma.producto.findMany({
+      where: { activo: true, esInsumo: true },
+      include: { variantes: true },
+    });
+
+    return productos
+      .filter(p => {
+        const stockTotal = p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0);
+        return stockTotal <= p.stockMinimo;
+      })
+      .map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        sku: p.sku,
+        tipo: 'insumo',
+        unidadMedida: p.unidadMedida || 'unidad',
+        stockActual: p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0),
+        stockMinimo: p.stockMinimo,
+        porcentaje: p.stockMinimo > 0 
+          ? Math.round((p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0) / p.stockMinimo) * 100) 
+          : 0,
+        urgencia: p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0) === 0 
+          ? 'Crítica' 
+          : p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0) <= p.stockMinimo * 0.5 
+          ? 'Alta' 
+          : 'Media',
+        variantes: p.variantes.map(v => ({
+          id: v.id,
+          atributo: v.atributo,
+          valor: v.valor,
+          stockAdicional: v.stockAdicional,
+        })),
+      }))
+      .sort((a, b) => a.porcentaje - b.porcentaje);
+  }
+
 }

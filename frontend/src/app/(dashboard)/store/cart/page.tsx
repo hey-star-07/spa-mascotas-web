@@ -11,9 +11,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
-import { ShoppingCart, Trash2, ArrowLeft, Send, User, Phone, MapPin, FileText, CheckCircle, Printer } from "lucide-react";
+import {
+  ShoppingCart, Trash2, ArrowLeft, Send, User, Phone, MapPin,
+  FileText, CheckCircle, Printer, Ticket, X, Tag, Percent, DollarSign,
+  Plus, Minus
+} from "lucide-react";
 import { toast } from "sonner";
 
+// ============================================
+// TIPOS
+// ============================================
 interface CartItem {
   id: number;
   cantidad: number;
@@ -29,8 +36,25 @@ interface CartData {
   total: number;
 }
 
+interface CuponInfo {
+  aplicado: boolean;
+  promocion?: {
+    id: number;
+    nombre: string;
+    codigoCupon: string;
+    tipo: string;
+    valor: number;
+  };
+  subtotal: number;
+  descuento: number;
+  total: number;
+}
+
 type PasoCompra = "carrito" | "datos-recibo" | "resumen" | "confirmado";
 
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 export default function CartPage() {
   const router = useRouter();
   const [cart, setCart] = useState<CartData | null>(null);
@@ -40,16 +64,17 @@ export default function CartPage() {
 
   // Datos del recibo
   const [datosRecibo, setDatosRecibo] = useState({
-    nombre: "",
-    ci: "",
-    telefono: "",
-    direccion: "",
-    email: "",
+    nombre: "", ci: "", telefono: "", direccion: "", email: "",
   });
 
   // WhatsApp
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [pedidoResult, setPedidoResult] = useState<any>(null);
+
+  // 👇 CUPÓN
+  const [cuponCode, setCuponCode] = useState("");
+  const [cuponInfo, setCuponInfo] = useState<CuponInfo | null>(null);
+  const [aplicandoCupon, setAplicandoCupon] = useState(false);
 
   useEffect(() => { loadCart(); }, []);
 
@@ -61,12 +86,57 @@ export default function CartPage() {
     finally { setLoading(false); }
   };
 
+  // 👇 APLICAR CUPÓN
+  const handleAplicarCupon = async () => {
+    if (!cuponCode.trim()) return toast.error("Ingresa un código de cupón");
+    setAplicandoCupon(true);
+    try {
+      const { data } = await api.post("/store/aplicar-cupon", {
+        codigoCupon: cuponCode.trim().toUpperCase(),
+      });
+      setCuponInfo(data.data);
+      toast.success(`¡Cupón aplicado! ${data.data.promocion?.nombre}`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Cupón inválido");
+      setCuponInfo(null);
+    } finally { setAplicandoCupon(false); }
+  };
+
+  // 👇 QUITAR CUPÓN
+  const handleQuitarCupon = async () => {
+    try {
+      await api.delete("/store/cupon");
+      setCuponInfo(null);
+      setCuponCode("");
+      toast.success("Cupón eliminado");
+    } catch { toast.error("Error al quitar cupón"); }
+  };
+
   const removeItem = async (detalleId: number) => {
     try {
       await api.delete(`/store/cart/${detalleId}`);
       toast.success("Eliminado");
+      setCuponInfo(null); // Resetear cupón al cambiar el carrito
       loadCart();
     } catch { toast.error("Error"); }
+  };
+
+  const updateCantidad = async (detalleId: number, newCantidad: number) => {
+    if (newCantidad < 1) return;
+    try {
+      // Eliminar y volver a agregar con nueva cantidad
+      await api.delete(`/store/cart/${detalleId}`);
+      const item = cart?.detalles.find(d => d.id === detalleId);
+      if (item) {
+        await api.post("/store/cart", {
+          productoId: item.producto.id,
+          varianteId: item.variante?.id,
+          cantidad: newCantidad,
+        });
+      }
+      setCuponInfo(null);
+      loadCart();
+    } catch { toast.error("Error al actualizar"); }
   };
 
   const irAPasoDatos = () => {
@@ -88,16 +158,16 @@ export default function CartPage() {
       const { data } = await api.post("/store/pedido", {
         metodoContacto: "WhatsApp",
         contactoDestino: whatsappNumber,
+        descuento: cuponInfo?.descuento || 0,
+        cuponAplicado: cuponInfo?.promocion?.nombre || "",
       });
       setPedidoResult(data.data);
       setPaso("confirmado");
       toast.success("Pedido enviado exitosamente");
-      
-      // 👇 Abrir WhatsApp en una nueva pestaña (con delay para evitar bloqueo)
+
       setTimeout(() => {
-        const link = data.data.whatsappLink;
-        if (link) {
-          window.open(link, "_blank", "noopener,noreferrer");
+        if (data.data.whatsappLink) {
+          window.open(data.data.whatsappLink, "_blank", "noopener,noreferrer");
         }
       }, 500);
     } catch (error: any) {
@@ -105,9 +175,12 @@ export default function CartPage() {
     } finally { setSending(false); }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
+
+  // Calcular totales
+  const subtotal = cart?.subtotal || 0;
+  const descuento = cuponInfo?.descuento || 0;
+  const totalFinal = subtotal - descuento;
 
   if (loading) return <LoadingSpinner text="Cargando carrito..." />;
 
@@ -128,7 +201,7 @@ export default function CartPage() {
         </div>
       )}
 
-      {/* PASO 1: CARRITO */}
+      {/* PASO 1: CARRITO CON CUPÓN */}
       {paso === "carrito" && (
         <Card>
           <CardHeader>
@@ -136,47 +209,130 @@ export default function CartPage() {
               <ShoppingCart className="h-6 w-6" /> Mi Carrito
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             {!cart || cart.detalles.length === 0 ? (
               <EmptyState icon={<ShoppingCart className="h-12 w-12" />} title="Carrito vacío" />
             ) : (
-              <div className="space-y-3">
-                {cart.detalles.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-3 border-2 border-foreground rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center">
-                        {item.producto.imagenUrl ? (
-                          <img src={getImageUrl(item.producto.imagenUrl) || ''} className="w-full h-full object-cover rounded-lg" />
-                        ) : (
-                          <ShoppingCart className="h-6 w-6 text-foreground/30" />
-                        )}
+              <>
+                {/* Productos */}
+                <div className="space-y-3">
+                  {cart.detalles.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between p-3 border-2 border-foreground rounded-xl">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center">
+                          {item.producto.imagenUrl ? (
+                            <img src={getImageUrl(item.producto.imagenUrl) || ''} className="w-full h-full object-cover rounded-lg" />
+                          ) : (
+                            <ShoppingCart className="h-6 w-6 text-foreground/30" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm">{item.producto.nombre}</p>
+                          {item.variante && <p className="text-xs">{item.variante.valor}</p>}
+                          <p className="text-xs">Bs. {Number(item.precioUnitario).toFixed(2)} c/u</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-bold text-sm">{item.producto.nombre}</p>
-                        {item.variante && <p className="text-xs">{item.variante.valor}</p>}
-                        <p className="text-xs">Bs. {Number(item.precioUnitario).toFixed(2)} x {item.cantidad}</p>
+                      <div className="flex items-center gap-3">
+                        {/* Selector de cantidad */}
+                        <div className="flex items-center border-2 border-foreground rounded-lg">
+                          <button onClick={() => updateCantidad(item.id, item.cantidad - 1)} className="px-2 py-1 text-sm font-bold hover:bg-primary/20">
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <span className="px-2 py-1 text-sm font-bold min-w-[30px] text-center">{item.cantidad}</span>
+                          <button onClick={() => updateCantidad(item.id, item.cantidad + 1)} className="px-2 py-1 text-sm font-bold hover:bg-primary/20">
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <p className="font-extrabold w-20 text-right">Bs. {(Number(item.precioUnitario) * item.cantidad).toFixed(2)}</p>
+                        <Button variant="destructive" size="sm" onClick={() => removeItem(item.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <p className="font-extrabold">Bs. {(Number(item.precioUnitario) * item.cantidad).toFixed(2)}</p>
-                      <Button variant="destructive" size="sm" onClick={() => removeItem(item.id)}>
-                        <Trash2 className="h-4 w-4" />
+                  ))}
+                </div>
+
+                {/* CUPÓN DE DESCUENTO */}
+                <div className="border-t-3 border-foreground pt-4">
+                  <Label className="flex items-center gap-1 text-sm font-extrabold mb-2">
+                    <Ticket className="h-4 w-4" /> ¿Tienes un cupón de descuento?
+                  </Label>
+
+                  {cuponInfo?.aplicado ? (
+                    /* Cupón aplicado */
+                    <div className="bg-primary/10 border-2 border-primary rounded-xl p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {cuponInfo.promocion?.tipo === 'porcentaje' ? (
+                            <Percent className="h-5 w-5 text-primary" />
+                          ) : (
+                            <DollarSign className="h-5 w-5 text-primary" />
+                          )}
+                          <div>
+                            <p className="font-extrabold text-sm text-primary">
+                              {cuponInfo.promocion?.nombre}
+                            </p>
+                            <p className="text-xs">
+                              {cuponInfo.promocion?.tipo === 'porcentaje'
+                                ? `${cuponInfo.promocion?.valor}% de descuento`
+                                : `Bs. ${cuponInfo.promocion?.valor} de descuento`}
+                            </p>
+                          </div>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={handleQuitarCupon}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p className="text-xs text-primary font-bold mt-2">
+                        Descuento aplicado: -Bs. {cuponInfo.descuento?.toFixed(2)}
+                      </p>
+                    </div>
+                  ) : (
+                    /* Input para cupón */
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Ingresa tu código de cupón"
+                        value={cuponCode}
+                        onChange={e => setCuponCode(e.target.value.toUpperCase())}
+                        className="flex-1 font-mono font-bold text-sm"
+                        onKeyDown={e => e.key === 'Enter' && handleAplicarCupon()}
+                      />
+                      <Button onClick={handleAplicarCupon} disabled={aplicandoCupon} variant="accent">
+                        <Ticket className="mr-2 h-4 w-4" />
+                        {aplicandoCupon ? "Aplicando..." : "Aplicar"}
                       </Button>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  )}
+                  <p className="text-[10px] text-foreground/50 mt-1">
+                    Ingresa el código de cupón proporcionado por Pet Spa
+                  </p>
+                </div>
+              </>
             )}
           </CardContent>
           {cart && cart.detalles.length > 0 && (
             <CardFooter>
               <div className="w-full space-y-3">
-                <div className="flex justify-between text-lg font-extrabold border-t-3 border-foreground pt-4">
-                  <span>Total:</span>
-                  <span>Bs. {cart.total.toFixed(2)}</span>
+                {/* Totales */}
+                <div className="border-t-3 border-foreground pt-4 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span>Subtotal:</span>
+                    <span>Bs. {subtotal.toFixed(2)}</span>
+                  </div>
+                  {descuento > 0 && (
+                    <div className="flex justify-between text-sm text-primary font-bold">
+                      <span>Descuento ({cuponInfo?.promocion?.nombre}):</span>
+                      <span>-Bs. {descuento.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-lg font-extrabold">
+                    <span>Total:</span>
+                    <span>Bs. {totalFinal.toFixed(2)}</span>
+                  </div>
                 </div>
+
                 <Button onClick={irAPasoDatos} className="w-full" variant="accent" size="lg">
-                  Continuar
+                  Continuar con los datos
                   <ArrowLeft className="ml-2 h-5 w-5 rotate-180" />
                 </Button>
               </div>
@@ -231,7 +387,7 @@ export default function CartPage() {
         </Card>
       )}
 
-      {/* PASO 3: RESUMEN Y ENVÍO */}
+      {/* PASO 3: RESUMEN */}
       {paso === "resumen" && cart && (
         <Card>
           <CardHeader>
@@ -262,29 +418,30 @@ export default function CartPage() {
               </div>
             </div>
 
-            {/* Totales */}
+            {/* Totales con descuento */}
             <div className="border-t-3 border-foreground pt-3 space-y-1">
               <div className="flex justify-between text-sm">
                 <span>Subtotal:</span>
-                <span>Bs. {cart.subtotal.toFixed(2)}</span>
+                <span>Bs. {subtotal.toFixed(2)}</span>
               </div>
+              {descuento > 0 && (
+                <div className="flex justify-between text-sm text-primary font-bold">
+                  <span>Descuento ({cuponInfo?.promocion?.nombre}):</span>
+                  <span>-Bs. {descuento.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-lg font-extrabold">
                 <span>Total:</span>
-                <span>Bs. {cart.total.toFixed(2)}</span>
+                <span>Bs. {totalFinal.toFixed(2)}</span>
               </div>
             </div>
 
             {/* WhatsApp */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
-                <Phone className="h-4 w-4" /> Número de WhatsApp para recibir el pedido *
+                <Phone className="h-4 w-4" /> Número de WhatsApp *
               </Label>
-              <Input
-                placeholder="+591 77777777"
-                value={whatsappNumber}
-                onChange={e => setWhatsappNumber(e.target.value)}
-              />
-              <p className="text-[10px] text-foreground/50">Recibirás el detalle de tu pedido por WhatsApp</p>
+              <Input placeholder="+591 77777777" value={whatsappNumber} onChange={e => setWhatsappNumber(e.target.value)} />
             </div>
 
             <div className="flex gap-3">
@@ -300,7 +457,7 @@ export default function CartPage() {
         </Card>
       )}
 
-      {/* PASO 4: CONFIRMADO */}
+      {/* PASO 4: CONFIRMADO CON RECIBO */}
       {paso === "confirmado" && pedidoResult && (
         <Card>
           <CardHeader>
@@ -314,20 +471,18 @@ export default function CartPage() {
               <p className="text-xs mt-1">Revisa tu WhatsApp para ver el detalle</p>
             </div>
 
-            {/* Recibo */}
+            {/* Recibo para imprimir */}
             <div id="recibo-impresion" className="border-3 border-foreground rounded-xl p-4 space-y-3 bg-white">
               <div className="text-center border-b-2 border-foreground pb-3">
                 <p className="text-xl font-extrabold">Pet Spa</p>
                 <p className="text-xs">Sistema de Gestión de Grooming</p>
                 <p className="text-[10px] text-foreground/50">{new Date().toLocaleDateString()}</p>
               </div>
-
               <div className="text-sm space-y-1">
                 <p><strong>Cliente:</strong> {datosRecibo.nombre}</p>
                 <p><strong>CI:</strong> {datosRecibo.ci}</p>
                 <p><strong>Tel:</strong> {datosRecibo.telefono}</p>
               </div>
-
               <div className="border-t-2 border-foreground pt-2">
                 <p className="font-bold text-xs mb-2">PRODUCTOS:</p>
                 {cart?.detalles.map((item) => (
@@ -337,11 +492,22 @@ export default function CartPage() {
                   </div>
                 ))}
               </div>
-
-              <div className="border-t-2 border-foreground pt-2 text-right">
-                <p className="text-sm"><strong>Total: Bs. {cart?.total.toFixed(2)}</strong></p>
+              <div className="border-t-2 border-foreground pt-2 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span>Subtotal:</span>
+                  <span>Bs. {subtotal.toFixed(2)}</span>
+                </div>
+                {descuento > 0 && (
+                  <div className="flex justify-between text-xs text-primary font-bold">
+                    <span>Descuento:</span>
+                    <span>-Bs. {descuento.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm font-extrabold">
+                  <span>Total:</span>
+                  <span>Bs. {totalFinal.toFixed(2)}</span>
+                </div>
               </div>
-
               <div className="text-center text-[10px] text-foreground/50 border-t-2 border-foreground pt-2">
                 <p>¡Gracias por tu compra!</p>
                 <p>Pet Spa - Cuidamos a tus mascotas</p>

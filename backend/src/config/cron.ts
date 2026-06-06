@@ -6,8 +6,8 @@ logger.info('⏰ CRON de notificaciones iniciado (cada 5 min)');
 setInterval(async () => {
   try {
     const result = await NotificationsService.sendPending();
-    if (result.enviadas > 0) {
-      logger.info(`📬 ${result.enviadas} notificaciones enviadas`);
+    if (result.total > 0) {
+      logger.info(`📬 Notificaciones: ${result.enviadas} enviadas, ${result.fallidas} fallidas de ${result.total} pendientes`);
     }
   } catch (error) {
     logger.error('Error en CRON de notificaciones:', error);

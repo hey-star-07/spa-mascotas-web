@@ -254,4 +254,115 @@ export class EmailUtils {
       logger.error(`Error al enviar email a ${to}:`, error);
     }
   }
+
+    /**
+   * Envía email de recordatorio 24 horas antes
+   */
+  static async sendRecordatorio24hEmail(
+    to: string,
+    nombreCliente: string,
+    nombreMascota: string,
+    servicio: string,
+    fecha: string,
+    hora: string,
+    groomer: string
+  ): Promise<void> {
+    const mailOptions = {
+      from: `"Pet Spa" <${emailConfig.from}>`,
+      to,
+      subject: `🐾 Recordatorio: Cita mañana para ${nombreMascota} - Pet Spa`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background-color: #FFF8F0; border: 3px solid #2D2D2D; border-radius: 16px; padding: 30px;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <span style="font-size: 48px;">🐾</span>
+            <h1 style="color: #2D2D2D; font-size: 24px; margin: 10px 0;">Pet Spa</h1>
+          </div>
+          
+          <h2 style="color: #2D2D2D; font-size: 20px;">Recordatorio de Cita</h2>
+          <p style="font-size: 16px; color: #555;">Hola <strong>${nombreCliente}</strong>,</p>
+          <p style="font-size: 16px; color: #555;">
+            Te recordamos que <strong>mañana</strong> tienes una cita para <strong>${nombreMascota}</strong>.
+          </p>
+          
+          <div style="background-color: #A8D5BA; border: 3px solid #2D2D2D; border-radius: 12px; padding: 20px; margin: 20px 0;">
+            <p style="font-size: 14px; margin: 5px 0;"><strong>📋 Servicio:</strong> ${servicio}</p>
+            <p style="font-size: 14px; margin: 5px 0;"><strong>📅 Fecha:</strong> ${fecha}</p>
+            <p style="font-size: 14px; margin: 5px 0;"><strong>🕐 Hora:</strong> ${hora}</p>
+            <p style="font-size: 14px; margin: 5px 0;"><strong>✂️ Groomer:</strong> ${groomer}</p>
+          </div>
+          
+          <p style="font-size: 14px; color: #888;">
+            Si necesitas cancelar o reprogramar, hazlo con al menos 24 horas de anticipación.
+          </p>
+          
+          <hr style="border: 2px solid #2D2D2D; margin: 20px 0;">
+          <p style="font-size: 12px; color: #888; text-align: center;">
+            © 2026 Pet Spa. Todos los derechos reservados.
+          </p>
+        </div>
+      `,
+    };
+
+    try {
+      await emailTransporter.sendMail(mailOptions);
+      logger.info(`Email recordatorio 24h enviado a ${to}`);
+    } catch (error) {
+      logger.error(`Error al enviar recordatorio 24h a ${to}:`, error);
+    }
+  }
+
+  /**
+   * Envía email de recordatorio 2 horas antes
+   */
+  static async sendRecordatorio2hEmail(
+    to: string,
+    nombreCliente: string,
+    nombreMascota: string,
+    servicio: string,
+    fecha: string,
+    hora: string,
+    groomer: string
+  ): Promise<void> {
+    const mailOptions = {
+      from: `"Pet Spa" <${emailConfig.from}>`,
+      to,
+      subject: `⏰ Tu cita para ${nombreMascota} es en 2 horas - Pet Spa`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background-color: #FFF8F0; border: 3px solid #2D2D2D; border-radius: 16px; padding: 30px;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <span style="font-size: 48px;">⏰</span>
+            <h1 style="color: #2D2D2D; font-size: 24px; margin: 10px 0;">Pet Spa</h1>
+          </div>
+          
+          <h2 style="color: #E8A87C; font-size: 20px;">¡Tu cita es en 2 horas!</h2>
+          <p style="font-size: 16px; color: #555;">Hola <strong>${nombreCliente}</strong>,</p>
+          <p style="font-size: 16px; color: #555;">
+            Te esperamos pronto para el servicio de <strong>${nombreMascota}</strong>.
+          </p>
+          
+          <div style="background-color: #F4E4BA; border: 3px solid #2D2D2D; border-radius: 12px; padding: 20px; margin: 20px 0;">
+            <p style="font-size: 14px; margin: 5px 0;"><strong>📋 ${servicio}</strong></p>
+            <p style="font-size: 14px; margin: 5px 0;"><strong>🕐 ${hora}</strong></p>
+            <p style="font-size: 14px; margin: 5px 0;"><strong>✂️ ${groomer}</strong></p>
+          </div>
+          
+          <p style="font-size: 14px; color: #888;">
+            ¡Te esperamos con las patitas listas! 🐾
+          </p>
+          
+          <hr style="border: 2px solid #2D2D2D; margin: 20px 0;">
+          <p style="font-size: 12px; color: #888; text-align: center;">
+            © 2026 Pet Spa. Todos los derechos reservados.
+          </p>
+        </div>
+      `,
+    };
+
+    try {
+      await emailTransporter.sendMail(mailOptions);
+      logger.info(`Email recordatorio 2h enviado a ${to}`);
+    } catch (error) {
+      logger.error(`Error al enviar recordatorio 2h a ${to}:`, error);
+    }
+  }
 }

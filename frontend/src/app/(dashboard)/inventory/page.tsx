@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ImageUpload } from "@/components/shared/image-upload";
-import { Package, AlertTriangle, Search, Plus, Box, PowerOff, Power } from "lucide-react";
+import { Package, AlertTriangle, Search, Plus, Box, PowerOff, Power, ShoppingBag, Scissors } from "lucide-react";
 import { toast } from "sonner";
 
 interface Producto {
@@ -45,6 +45,19 @@ export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [showBajoStock, setShowBajoStock] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  const [alertasTiendaCount, setAlertasTiendaCount] = useState(0);
+  const [alertasInsumosCount, setAlertasInsumosCount] = useState(0);
+
+  useEffect(() => {
+    Promise.all([
+      api.get("/inventory/alertas/tienda"),
+      api.get("/inventory/alertas/insumos"),
+    ]).then(([tiendaRes, insumosRes]) => {
+      setAlertasTiendaCount(tiendaRes.data.total || 0);
+      setAlertasInsumosCount(insumosRes.data.total || 0);
+    }).catch(() => {});
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -91,6 +104,28 @@ export default function InventoryPage() {
         {user?.rol === "Admin" && (
           <Button onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" /> Nuevo Producto</Button>
         )}
+      </div>
+      <div className="flex items-center gap-2">
+        <Link href="/inventory/alerts?tab=tienda">
+          <Button variant="outline" size="sm" className="relative">
+            <ShoppingBag className="mr-1 h-4 w-4" /> Tienda
+            {alertasTiendaCount > 0 && (
+              <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-[10px]">
+                {alertasTiendaCount}
+              </Badge>
+            )}
+          </Button>
+        </Link>
+        <Link href="/inventory/alerts?tab=insumos">
+          <Button variant="outline" size="sm" className="relative">
+            <Scissors className="mr-1 h-4 w-4" /> Insumos
+            {alertasInsumosCount > 0 && (
+              <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-[10px]">
+                {alertasInsumosCount}
+              </Badge>
+            )}
+          </Button>
+        </Link>
       </div>
 
       {alertas.length > 0 && (

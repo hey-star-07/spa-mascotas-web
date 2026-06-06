@@ -61,4 +61,8 @@ router.get('/log-insumos/resumen', authenticate, authorize('Admin'), InventoryCo
 router.get('/categorias', authenticate, InventoryController.getCategorias);
 router.post('/categorias', authenticate, authorize('Admin'), InventoryController.createCategoria);
 
+// Alertas separadas por tipo
+router.get('/alertas/tienda', authenticate, authorize('Admin', 'Recepcion'), InventoryController.getAlertasTienda);
+router.get('/alertas/insumos', authenticate, authorize('Admin', 'Recepcion'), InventoryController.getAlertasInsumos);
+
 export default router;

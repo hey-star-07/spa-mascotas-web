@@ -110,73 +110,121 @@ export class StoreService {
   }
 
   // Generar pedido y mensaje para WhatsApp/Telegram
-  static async generarPedido(usuarioId: number, data: CreatePedidoDTO) {
+  static async generarPedido(usuarioId: number, data: CreatePedidoDTO & { descuento?: number; cuponAplicado?: string }) {
     const carrito = await this.getCart(usuarioId);
     if (!carrito.detalles || carrito.detalles.length === 0) {
-      throw new AppError(ErrorCodes.VALIDATION_ERROR, 422, '🛒 El carrito está vacío');
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, 422, 'El carrito está vacío');
     }
 
-    // Buscar el cliente con su información completa
-    const cliente = await prisma.cliente.findUnique({
-      where: { usuarioId },
-      include: { usuario: true } // Incluir datos del usuario para obtener el nombre
-    });
-    
-    if (!cliente) throw new AppError(ErrorCodes.USER_NOT_FOUND, 404, '❌ Cliente no encontrado');
+    const cliente = await prisma.cliente.findUnique({ where: { usuarioId } });
+    if (!cliente) throw new AppError(ErrorCodes.USER_NOT_FOUND, 404, 'Cliente no encontrado');
 
-    // Obtener el nombre del cliente (priorizar nombre de usuario o cliente)
-    const nombreCliente = cliente.usuario?.nombre || `Cliente #${cliente.id}`;
+    const descuento = data.descuento || 0;
+    const totalFinal = carrito.subtotal - descuento;
 
     // Crear pedido
     const pedido = await prisma.pedido.create({
       data: {
         clienteId: cliente.id,
         subtotal: carrito.subtotal,
-        total: carrito.total,
+        descuento: descuento,
+        total: totalFinal,
         metodoContacto: data.metodoContacto,
         contactoDestino: data.contactoDestino,
       },
     });
 
-    // Generar mensaje con emojis y nombre del cliente
-    let mensaje = `🐾 *NUEVO PEDIDO - PET SPA* 🐾\n`;
-    mensaje += `╭──────────────────╮\n`;
-    mensaje += `✨ ¡Hola *${nombreCliente}*! ✨\n`;
-    mensaje += `╰──────────────────╯\n\n`;
-    mensaje += `📋 *Detalle de tu compra:*\n`;
-    mensaje += `┌─────────────────┐\n`;
-    
+    // Generar mensaje para WhatsApp
+    let mensaje = `*Nuevo Pedido - Pet Spa*\n\n`;
+    mensaje += `*Cliente:* ${data.contactoDestino}\n\n`;
+    mensaje += `*Productos:*\n`;
+
     for (const d of carrito.detalles) {
       const variante = d.variante ? ` (${d.variante.valor})` : '';
-      const subtotalItem = Number(d.precioUnitario) * d.cantidad;
-      mensaje += `│ • ${d.producto.nombre}${variante}\n`;
-      mensaje += `│   🧮 ${d.cantidad} x Bs. ${Number(d.precioUnitario).toFixed(2)}\n`;
-      mensaje += `│   💰 → Bs. ${subtotalItem.toFixed(2)}\n`;
+      mensaje += `• ${d.producto.nombre}${variante} x${d.cantidad} - Bs. ${(Number(d.precioUnitario) * d.cantidad).toFixed(2)}\n`;
     }
-    
-    mensaje += `└─────────────────┘\n\n`;
-    mensaje += `💵 *Subtotal:* Bs. ${carrito.subtotal.toFixed(2)}\n`;
-    mensaje += `🎯 *Total a pagar:* Bs. ${carrito.total.toFixed(2)}\n\n`;
-    mensaje += `📞 *Contacto:* ${data.contactoDestino}\n`;
-    mensaje += `🐶 *¡Gracias por preferir Pet Spa!* 🐱\n`;
-    mensaje += `✨ *Pronto nos comunicaremos contigo* ✨`;
+
+    mensaje += `\n*Subtotal:* Bs. ${carrito.subtotal.toFixed(2)}\n`;
+
+    if (descuento > 0) {
+      mensaje += `*Descuento (${data.cuponAplicado || 'Cupón'}):* -Bs. ${descuento.toFixed(2)}\n`;
+    }
+
+    mensaje += `*Total:* Bs. ${totalFinal.toFixed(2)}\n\n`;
+    mensaje += `_Gracias por tu compra en Pet Spa_`;
 
     // Limpiar carrito
     await prisma.detalleCarrito.deleteMany({ where: { carritoId: carrito.id } });
 
-    // Generar link de WhatsApp (formato internacional)
+    // Generar link de WhatsApp
     const numeroLimpio = data.contactoDestino.replace(/\D/g, '');
     const mensajeEncoded = encodeURIComponent(mensaje);
     const whatsappLink = `https://wa.me/591${numeroLimpio}?text=${mensajeEncoded}`;
-
-    console.log('📱 WhatsApp link generado para:', nombreCliente);
-    console.log('🔗 Enlace:', whatsappLink);
 
     return {
       pedido,
       mensaje,
       whatsappLink,
-      nombreCliente, // También devolvemos el nombre por si se necesita
+      descuento,
+      totalFinal,
+    };
+  }
+
+  // Aplicar cupón al carrito
+  static async aplicarCuponAlCarrito(usuarioId: number, codigoCupon: string) {
+    // Buscar el carrito activo
+    const carrito = await this.getCart(usuarioId);
+    if (!carrito.detalles || carrito.detalles.length === 0) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, 422, 'El carrito está vacío');
+    }
+
+    // Buscar la promoción
+    const promocion = await prisma.promocion.findFirst({
+      where: {
+        codigoCupon: codigoCupon.toUpperCase(),
+        activo: true,
+        fechaInicio: { lte: new Date() },
+        fechaFin: { gte: new Date() },
+      },
+    });
+
+    if (!promocion) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, 422, 'Cupón inválido o expirado');
+    }
+
+    // Calcular descuento
+    let descuento = 0;
+    if (promocion.tipo === 'porcentaje') {
+      descuento = carrito.subtotal * (Number(promocion.valor) / 100);
+    } else if (promocion.tipo === 'monto_fijo') {
+      descuento = Math.min(Number(promocion.valor), carrito.subtotal);
+    }
+
+    const totalConDescuento = carrito.subtotal - descuento;
+
+    return {
+      aplicado: true,
+      promocion: {
+        id: promocion.id,
+        nombre: promocion.nombre,
+        codigoCupon: promocion.codigoCupon,
+        tipo: promocion.tipo,
+        valor: Number(promocion.valor),
+      },
+      subtotal: carrito.subtotal,
+      descuento: Math.round(descuento * 100) / 100,
+      total: Math.round(totalConDescuento * 100) / 100,
+    };
+  }
+
+  // Quitar cupón del carrito
+  static async quitarCuponDelCarrito(usuarioId: number) {
+    const carrito = await this.getCart(usuarioId);
+    
+    return {
+      aplicado: false,
+      subtotal: carrito.subtotal,
+      total: carrito.subtotal,
     };
   }
 }

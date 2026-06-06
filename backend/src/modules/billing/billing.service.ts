@@ -67,9 +67,19 @@ export class BillingService {
     return prisma.factura.findMany({
       where: { clienteId },
       include: {
+        cliente: { 
+          include: { 
+            usuario: { select: { nombre: true, apellido: true, email: true } } 
+          } 
+        },
         detalles: true,
         pagos: true,
-        cita: { include: { servicio: { select: { nombre: true } } } },
+        cita: { 
+          include: { 
+            mascota: { select: { nombre: true } }, 
+            servicio: { select: { nombre: true } } 
+          } 
+        },
       },
       orderBy: { fechaEmision: 'desc' },
     });

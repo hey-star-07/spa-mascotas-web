@@ -49,4 +49,34 @@ export class StoreController {
       res.status(201).json({ status: 'success', data: result });
     } catch (error) { next(error); }
   }
+
+  /**
+   * POST /api/store/aplicar-cupon
+   * Aplica un cupón de descuento al carrito
+   */
+  static async aplicarCupon(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { codigoCupon } = req.body;
+      const userId = req.user!.userId;
+
+      if (!codigoCupon) {
+        return res.status(400).json({ status: 'error', message: 'Código de cupón requerido' });
+      }
+
+      const result = await StoreService.aplicarCuponAlCarrito(userId, codigoCupon);
+      res.status(200).json({ status: 'success', data: result });
+    } catch (error) { next(error); }
+  }
+
+  /**
+   * DELETE /api/store/cupon
+   * Quita el cupón aplicado del carrito
+   */
+  static async quitarCupon(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user!.userId;
+      const result = await StoreService.quitarCuponDelCarrito(userId);
+      res.status(200).json({ status: 'success', data: result });
+    } catch (error) { next(error); }
+  }
 }

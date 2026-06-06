@@ -16,7 +16,12 @@ export class BillingController {
     try {
       const userId = req.user!.userId;
       const cliente = await prisma.cliente.findUnique({ where: { usuarioId: userId } });
-      if (!cliente) return res.status(200).json({ status: 'success', data: [] });
+      
+      if (!cliente) {
+        // Si el usuario es cliente pero no tiene registro en la tabla clientes
+        return res.status(200).json({ status: 'success', data: [] });
+      }
+      
       const facturas = await BillingService.getByCliente(cliente.id);
       res.status(200).json({ status: 'success', data: facturas });
     } catch (error) { next(error); }

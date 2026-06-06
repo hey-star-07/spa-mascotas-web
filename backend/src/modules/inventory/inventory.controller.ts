@@ -515,5 +515,20 @@ export class InventoryController {
       res.status(201).json({ status: 'success', data: categoria });
     } catch (error) { next(error); }
   }
+  // GET /api/inventory/alertas/tienda
+  static async getAlertasTienda(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await InventoryService.getAlertasTienda();
+      res.status(200).json({ status: 'success', data, total: data.length });
+    } catch (error) { next(error); }
+  }
+
+  // GET /api/inventory/alertas/insumos
+  static async getAlertasInsumos(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await InventoryService.getAlertasInsumos();
+      res.status(200).json({ status: 'success', data, total: data.length });
+    } catch (error) { next(error); }
+  }
 
 }

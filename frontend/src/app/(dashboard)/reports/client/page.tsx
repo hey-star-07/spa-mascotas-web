@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
-import { Dog, Camera, Calendar, Scissors } from "lucide-react";
+import { Dog, Camera, Calendar, Scissors, MessageSquare, ClipboardList } from "lucide-react";
 
 export default function ClientReportsPage() {
   const [data, setData] = useState<any>(null);
@@ -42,18 +42,42 @@ export default function ClientReportsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Últimas citas */}
+              {/* Últimas citas con recomendaciones */}
               <div>
-                <p className="text-sm font-bold mb-2">Últimos servicios:</p>
-                <div className="space-y-1">
+                <p className="text-sm font-bold mb-2 flex items-center gap-1">
+                  <Calendar className="h-4 w-4" /> Últimos servicios:
+                </p>
+                <div className="space-y-2">
                   {m.ultimasCitas?.map((c: any, i: number) => (
-                    <div key={i} className="flex justify-between text-sm border-b border-foreground/10 py-1">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(c.fecha).toLocaleDateString()}
+                    <div key={i} className="border-2 border-foreground rounded-xl p-3">
+                      <div className="flex justify-between text-sm mb-1">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(c.fecha).toLocaleDateString()}
+                        </div>
+                        <span className="font-bold">{c.servicio}</span>
+                        <Badge variant="outline" className="text-[10px]">{c.estado}</Badge>
                       </div>
-                      <span>{c.servicio}</span>
-                      <Badge variant="outline" className="text-[10px]">{c.estado}</Badge>
+                      
+                      {/* Estado de ingreso */}
+                      {c.estadoIngreso && (
+                        <div className="mt-2 bg-secondary/30 rounded-lg p-2 text-xs">
+                          <p className="font-bold flex items-center gap-1">
+                            <ClipboardList className="h-3 w-3" /> Estado al ingreso:
+                          </p>
+                          <p className="text-foreground/70 mt-0.5">{c.estadoIngreso}</p>
+                        </div>
+                      )}
+
+                      {/* Recomendaciones del groomer */}
+                      {c.recomendaciones && (
+                        <div className="mt-2 bg-lavender/10 border-2 border-lavender rounded-xl p-2">
+                          <p className="text-xs font-bold text-lavender flex items-center gap-1 mb-1">
+                            <MessageSquare className="h-3 w-3" /> Recomendaciones del groomer:
+                          </p>
+                          <p className="text-xs text-foreground/70">{c.recomendaciones}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -68,9 +92,17 @@ export default function ClientReportsPage() {
                   <div className="flex flex-wrap gap-2">
                     {m.fotos.slice(0, 8).map((f: any, i: number) => (
                       <div key={i} className="relative">
-                        <Badge className="absolute top-1 left-1 z-10 text-[9px]">{f.tipo === 'antes' ? 'Antes' : 'Después'}</Badge>
-                        <img src={getImageUrl(f.url) || ''} className="w-20 h-20 object-cover rounded-xl border-2 border-foreground" />
-                        <p className="text-[8px] text-center">{new Date(f.fecha).toLocaleDateString()}</p>
+                        <Badge className="absolute top-1 left-1 z-10 text-[9px]">
+                          {f.tipo === 'antes' ? 'Antes' : 'Después'}
+                        </Badge>
+                        <img
+                          src={getImageUrl(f.url) || ''}
+                          className="w-20 h-20 object-cover rounded-xl border-2 border-foreground"
+                          alt={f.tipo}
+                        />
+                        <p className="text-[8px] text-center mt-0.5">
+                          {new Date(f.fecha).toLocaleDateString()}
+                        </p>
                       </div>
                     ))}
                   </div>
