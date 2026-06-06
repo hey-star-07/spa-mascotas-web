@@ -41,7 +41,8 @@ export class BillingService {
         },
         detalles: true,
         pagos: true,
-        cita: { select: { id: true, mascota: { select: { nombre: true } } } },
+        cita: { select: { id: true, mascota: { select: { nombre: true } }, servicio: { select: { nombre: true } } } },
+        pedido: { select: { id: true, estado: true, metodoContacto: true } },
       },
       orderBy: { fechaEmision: 'desc' },
     });
@@ -64,21 +65,26 @@ export class BillingService {
 
   // Obtener facturas de un cliente
   static async getByCliente(clienteId: number) {
+    // Incluye facturas directas (servicio grooming) Y facturas asociadas a pedidos de tienda
     return prisma.factura.findMany({
       where: { clienteId },
       include: {
-        cliente: { 
-          include: { 
-            usuario: { select: { nombre: true, apellido: true, email: true } } 
-          } 
+        cliente: {
+          include: {
+            usuario: { select: { nombre: true, apellido: true, email: true } }
+          }
         },
         detalles: true,
         pagos: true,
-        cita: { 
-          include: { 
-            mascota: { select: { nombre: true } }, 
-            servicio: { select: { nombre: true } } 
-          } 
+        cita: {
+          include: {
+            mascota: { select: { nombre: true } },
+            servicio: { select: { nombre: true } }
+          }
+        },
+        // Incluir datos del pedido de tienda si la factura tiene pedidoId
+        pedido: {
+          select: { id: true, estado: true, metodoContacto: true }
         },
       },
       orderBy: { fechaEmision: 'desc' },

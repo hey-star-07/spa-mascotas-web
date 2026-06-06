@@ -53,10 +53,57 @@ export class InventoryController {
   // PUT /api/inventory/variantes/:id/stock
   static async updateStock(req: Request, res: Response, next: NextFunction) {
     try {
-      const { cantidad } = req.body;
-      const variante = await InventoryService.updateStockVariante(parseInt(req.params.id), cantidad);
-      res.status(200).json({ status: 'success', data: variante });
-    } catch (error) { next(error); }
+      const { cantidad, tipo, motivo } = req.body;
+      const varianteId = parseInt(req.params.id);
+      
+      // 👇 Validar que cantidad sea positiva para entrada
+      const cantidadAbsoluta = Math.abs(parseInt(cantidad) || 0);
+      
+      if (cantidadAbsoluta <= 0) {
+        return res.status(400).json({ status: 'error', message: 'Cantidad debe ser mayor a 0' });
+      }
+
+      const variante = await prisma.varianteProducto.findUnique({ where: { id: varianteId } });
+      if (!variante) {
+        return res.status(404).json({ status: 'error', message: 'Variante no encontrada' });
+      }
+
+      // 👇 Para entrada/salida
+      let nuevoStock: number;
+      if (tipo === 'entrada' || tipo === 'devolucion' || tipo === 'Reabastecimiento') {
+        nuevoStock = variante.stockAdicional + cantidadAbsoluta;
+      } else if (tipo === 'salida' || tipo === 'merma') {
+        nuevoStock = Math.max(0, variante.stockAdicional - cantidadAbsoluta);
+      } else {
+        // Por defecto: sumar (el frontend envía "Reabastecimiento" o similar)
+        nuevoStock = variante.stockAdicional + cantidadAbsoluta;
+      }
+
+      const updated = await prisma.varianteProducto.update({
+        where: { id: varianteId },
+        data: { stockAdicional: nuevoStock },
+      });
+
+      // Registrar en auditoría
+      await prisma.auditLog.create({
+        data: {
+          tablaAfectada: 'variantes_producto',
+          registroId: varianteId,
+          accion: tipo === 'entrada' || tipo === 'Reabastecimiento' ? 'STOCK_ENTRADA' : 'STOCK_SALIDA',
+          usuarioId: req.user!.userId,
+          datosAntiguos: { stockAnterior: variante.stockAdicional },
+          datosNuevos: { stockNuevo: nuevoStock, cantidad: cantidadAbsoluta, motivo: motivo || 'Reabastecimiento' },
+        },
+      });
+
+      res.status(200).json({
+        status: 'success',
+        data: updated,
+        message: `Stock actualizado: ${variante.stockAdicional} → ${nuevoStock} (+${cantidadAbsoluta})`,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
 
   // GET /api/inventory/alertas
@@ -530,5 +577,4 @@ export class InventoryController {
       res.status(200).json({ status: 'success', data, total: data.length });
     } catch (error) { next(error); }
   }
-
 }

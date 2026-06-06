@@ -5,7 +5,7 @@ import Link from "next/link";
 import api from "@/lib/axios";
 import { useAuthStore } from "@/store/auth-store";
 import { getImageUrl } from "@/lib/images";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,28 +14,29 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ImageUpload } from "@/components/shared/image-upload";
-import { Package, AlertTriangle, Search, Plus, Box, PowerOff, Power, ShoppingBag, Scissors } from "lucide-react";
+import {
+  Package, AlertTriangle, Search, Plus, Box, PowerOff, Power,
+  ShoppingBag, Scissors, Pencil, PackagePlus
+} from "lucide-react";
 import { toast } from "sonner";
 
 interface Producto {
   id: number;
   sku: string;
   nombre: string;
+  descripcion?: string;
   precioBase: number;
   stockMinimo: number;
   imagenUrl: string | null;
   activo?: boolean;
-  categoria: { nombre: string } | null;
+  esInsumo?: boolean;
+  esTienda?: boolean;
+  unidadMedida?: string;
+  categoria: { id: number; nombre: string } | null;
   variantes: Array<{ id: number; atributo: string; valor: string; stockAdicional: number }>;
 }
 
-interface Alerta {
-  id: number;
-  nombre: string;
-  sku: string;
-  stockActual: number;
-  stockMinimo: number;
-}
+interface Alerta { id: number; nombre: string; sku: string; stockActual: number; stockMinimo: number; }
 
 export default function InventoryPage() {
   const { user } = useAuthStore();
@@ -45,18 +46,16 @@ export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [showBajoStock, setShowBajoStock] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-
+  const [editOpen, setEditOpen] = useState(false);
+  const [restockOpen, setRestockOpen] = useState(false);
+  const [selectedProducto, setSelectedProducto] = useState<Producto | null>(null);
   const [alertasTiendaCount, setAlertasTiendaCount] = useState(0);
   const [alertasInsumosCount, setAlertasInsumosCount] = useState(0);
 
   useEffect(() => {
-    Promise.all([
-      api.get("/inventory/alertas/tienda"),
-      api.get("/inventory/alertas/insumos"),
-    ]).then(([tiendaRes, insumosRes]) => {
-      setAlertasTiendaCount(tiendaRes.data.total || 0);
-      setAlertasInsumosCount(insumosRes.data.total || 0);
-    }).catch(() => {});
+    Promise.all([api.get("/inventory/alertas/tienda"), api.get("/inventory/alertas/insumos")])
+      .then(([t, i]) => { setAlertasTiendaCount(t.data.total || 0); setAlertasInsumosCount(i.data.total || 0); })
+      .catch(() => {});
   }, []);
 
   const loadData = async () => {
@@ -74,14 +73,12 @@ export default function InventoryPage() {
 
   useEffect(() => { loadData(); }, [search, showBajoStock]);
 
-  const getStockTotal = (producto: Producto) => {
-    return producto.variantes.reduce((sum, v) => sum + v.stockAdicional, 0);
-  };
+  const getStockTotal = (p: Producto) => p.variantes.reduce((s, v) => s + v.stockAdicional, 0);
 
-  const toggleActive = async (producto: Producto) => {
+  const toggleActive = async (p: Producto) => {
     try {
-      await api.put(`/inventory/productos/${producto.id}`, { activo: !producto.activo });
-      toast.success(producto.activo ? "Producto desactivado" : "Producto activado");
+      await api.put(`/inventory/productos/${p.id}`, { activo: !p.activo });
+      toast.success(p.activo ? "Desactivado" : "Activado");
       loadData();
     } catch { toast.error("Error"); }
   };
@@ -90,13 +87,14 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
           <Box className="h-8 w-8" strokeWidth={3} />
           <div>
             <h1 className="text-3xl font-extrabold">Inventario</h1>
             <p className="text-sm font-semibold text-foreground/70">
-              {productos.length} producto{productos.length !== 1 && "s"}
+              {productos.length} productos
               {alertas.length > 0 && <Badge variant="destructive" className="ml-2">{alertas.length} alertas</Badge>}
             </p>
           </div>
@@ -105,49 +103,43 @@ export default function InventoryPage() {
           <Button onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" /> Nuevo Producto</Button>
         )}
       </div>
+
+      {/* Links alertas */}
       <div className="flex items-center gap-2">
         <Link href="/inventory/alerts?tab=tienda">
           <Button variant="outline" size="sm" className="relative">
             <ShoppingBag className="mr-1 h-4 w-4" /> Tienda
-            {alertasTiendaCount > 0 && (
-              <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-[10px]">
-                {alertasTiendaCount}
-              </Badge>
-            )}
+            {alertasTiendaCount > 0 && <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-[10px]">{alertasTiendaCount}</Badge>}
           </Button>
         </Link>
         <Link href="/inventory/alerts?tab=insumos">
           <Button variant="outline" size="sm" className="relative">
             <Scissors className="mr-1 h-4 w-4" /> Insumos
-            {alertasInsumosCount > 0 && (
-              <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-[10px]">
-                {alertasInsumosCount}
-              </Badge>
-            )}
+            {alertasInsumosCount > 0 && <Badge variant="destructive" className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-[10px]">{alertasInsumosCount}</Badge>}
           </Button>
         </Link>
       </div>
 
+      {/* Banner alertas rápido */}
       {alertas.length > 0 && (
-        <Card className="border-rose bg-rose/5">
-          <CardHeader><CardTitle className="flex items-center gap-2 text-rose"><AlertTriangle className="h-5 w-5" /> Alertas de Bajo Stock ({alertas.length})</CardTitle></CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {alertas.map((a) => (
-                <div key={a.id} className="p-3 border-2 border-rose rounded-xl bg-white">
-                  <p className="font-extrabold text-sm">{a.nombre}</p>
-                  <p className="text-xs">SKU: {a.sku}</p>
-                  <p className="text-xs text-rose font-bold mt-1">
-                    Stock: {a.stockActual} / Mín: {a.stockMinimo}
-                    {a.stockActual === 0 && " - ¡AGOTADO!"}
-                  </p>
-                </div>
+        <div className="bg-rose/5 border-2 border-rose rounded-2xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-rose" />
+            <span className="font-extrabold text-rose text-sm">{alertas.length} producto{alertas.length > 1 ? "s" : ""} con stock bajo</span>
+            <div className="flex flex-wrap gap-1">
+              {alertas.slice(0,3).map(a => (
+                <span key={a.id} className="text-xs bg-rose/10 px-2 py-0.5 rounded-full font-semibold border border-rose/30">
+                  {a.nombre} ({a.stockActual}/{a.stockMinimo})
+                </span>
               ))}
+              {alertas.length > 3 && <span className="text-xs text-rose font-bold">+{alertas.length - 3} más</span>}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          <Link href="/inventory/alerts"><Button size="sm" variant="destructive">Ver todas</Button></Link>
+        </div>
       )}
 
+      {/* Barra búsqueda + filtro */}
       <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-foreground/50" />
@@ -158,57 +150,75 @@ export default function InventoryPage() {
         </Button>
       </div>
 
+      {/* Grid */}
       {productos.length === 0 ? (
         <EmptyState icon={<Package className="h-12 w-12" />} title="Sin productos" description="No se encontraron productos" />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {productos.map((p) => {
             const stock = getStockTotal(p);
-            // FIX: alerta solo cuando está ESTRICTAMENTE por debajo del mínimo, no cuando es igual
             const bajo = stock < p.stockMinimo;
             const enMinimo = stock === p.stockMinimo;
             return (
-              <Card key={p.id} className={`hover:shadow-cartoon-hover transition-all overflow-hidden ${bajo ? "border-rose bg-rose/5" : enMinimo ? "border-amber-400 bg-amber-50" : ""} ${p.activo === false ? "opacity-50" : ""}`}>
-                <div className="h-40 bg-secondary flex items-center justify-center border-b-3 border-foreground relative">
+              <Card key={p.id} className={`hover:shadow-cartoon-hover transition-all overflow-hidden flex flex-col
+                ${bajo ? "border-rose bg-rose/5" : enMinimo ? "border-amber-400 bg-amber-50" : ""}
+                ${p.activo === false ? "opacity-50" : ""}`}>
+
+                {/* Imagen */}
+                <div className="h-36 bg-secondary flex items-center justify-center border-b-3 border-foreground relative">
                   {p.imagenUrl ? (
                     <img src={getImageUrl(p.imagenUrl) || ''} alt={p.nombre} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="flex flex-col items-center gap-2 text-foreground/40">
-                      <Package className="h-12 w-12" strokeWidth={2} />
-                      <span className="text-xs font-semibold">Sin imagen</span>
+                    <div className="flex flex-col items-center gap-1 text-foreground/40">
+                      <Package className="h-10 w-10" strokeWidth={2} />
+                      <span className="text-[10px] font-semibold">Sin imagen</span>
                     </div>
                   )}
-                  {bajo && <Badge variant="destructive" className="absolute top-2 right-2">{stock === 0 ? "¡AGOTADO!" : "Bajo"}</Badge>}
-                  {enMinimo && <Badge className="absolute top-2 right-2 bg-amber-500 text-white border-0">En mínimo</Badge>}
+                  {bajo && <Badge variant="destructive" className="absolute top-2 right-2 text-[10px]">{stock === 0 ? "¡AGOTADO!" : "Bajo"}</Badge>}
+                  {enMinimo && <Badge className="absolute top-2 right-2 bg-amber-500 text-white border-0 text-[10px]">En mínimo</Badge>}
+                  {p.activo === false && <Badge className="absolute top-2 left-2 bg-gray-400 text-white border-0 text-[10px]">Inactivo</Badge>}
                 </div>
-                <CardContent className="pt-4 space-y-3">
+
+                <CardContent className="pt-3 space-y-2 flex-1 flex flex-col">
                   <div>
-                    <h3 className="text-lg font-extrabold truncate">{p.nombre}</h3>
-                    <p className="text-xs font-mono text-foreground/50">{p.sku}</p>
+                    <h3 className="text-base font-extrabold truncate">{p.nombre}</h3>
+                    <p className="text-[10px] font-mono text-foreground/40">{p.sku}</p>
                   </div>
-                  {p.categoria && <Badge variant="outline" className="text-xs">{p.categoria.nombre}</Badge>}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-foreground/70">Stock:</span>
+                  {p.categoria && <Badge variant="outline" className="text-[10px] self-start">{p.categoria.nombre}</Badge>}
+
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-foreground/60">Stock:</span>
                       <span className={`font-extrabold ${bajo ? "text-rose" : enMinimo ? "text-amber-600" : "text-primary"}`}>{stock} uds</span>
                     </div>
-                    <div className="flex justify-between text-sm"><span className="text-foreground/70">Mínimo:</span><span className="font-semibold">{p.stockMinimo} uds</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-foreground/70">Precio:</span><span className="font-bold text-lg">Bs. {Number(p.precioBase).toFixed(2)}</span></div>
+                    <div className="flex justify-between"><span className="text-foreground/60">Mínimo:</span><span className="font-semibold">{p.stockMinimo} uds</span></div>
+                    <div className="flex justify-between"><span className="text-foreground/60">Precio:</span><span className="font-bold text-sm">Bs. {Number(p.precioBase).toFixed(2)}</span></div>
                   </div>
+
                   {p.variantes.length > 0 && (
-                    <div className="border-t-2 border-foreground/20 pt-2">
-                      <p className="text-xs font-bold mb-1">Variantes:</p>
+                    <div className="border-t border-foreground/20 pt-1.5 space-y-0.5">
                       {p.variantes.map(v => (
-                        <div key={v.id} className="flex justify-between text-xs bg-secondary/50 rounded-lg px-2 py-1">
+                        <div key={v.id} className="flex justify-between text-[10px] bg-secondary/50 rounded px-1.5 py-0.5">
                           <span className="font-semibold">{v.atributo}: {v.valor}</span>
                           <span className="font-bold">{v.stockAdicional} uds</span>
                         </div>
                       ))}
                     </div>
                   )}
+
+                  {/* Botones acción */}
                   {user?.rol === "Admin" && (
-                    <div className="pt-2">
-                      <Button size="sm" variant={p.activo === false ? "default" : "destructive"} onClick={() => toggleActive(p)} className="w-full">
+                    <div className="pt-2 mt-auto grid grid-cols-2 gap-1.5">
+                      {/* Editar */}
+                      <Button size="sm" variant="outline" className="text-xs" onClick={() => { setSelectedProducto(p); setEditOpen(true); }}>
+                        <Pencil className="h-3 w-3 mr-1" /> Editar
+                      </Button>
+                      {/* Reabastecer */}
+                      <Button size="sm" variant="secondary" className="text-xs" onClick={() => { setSelectedProducto(p); setRestockOpen(true); }}>
+                        <PackagePlus className="h-3 w-3 mr-1" /> Abastecer
+                      </Button>
+                      {/* Activar/Desactivar — full width */}
+                      <Button size="sm" variant={p.activo === false ? "default" : "destructive"} onClick={() => toggleActive(p)} className="col-span-2 text-xs">
                         {p.activo === false ? <><Power className="h-3 w-3 mr-1" /> Activar</> : <><PowerOff className="h-3 w-3 mr-1" /> Desactivar</>}
                       </Button>
                     </div>
@@ -220,241 +230,258 @@ export default function InventoryPage() {
         </div>
       )}
 
+      {/* Crear producto */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Nuevo Producto</DialogTitle></DialogHeader>
+        <DialogContent><DialogHeader><DialogTitle>Nuevo Producto</DialogTitle></DialogHeader>
           <NuevoProductoForm onSuccess={() => { setDialogOpen(false); loadData(); }} />
         </DialogContent>
       </Dialog>
+
+      {/* Editar producto */}
+      {selectedProducto && (
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent><DialogHeader><DialogTitle>Editar — {selectedProducto.nombre}</DialogTitle></DialogHeader>
+            <EditarProductoForm producto={selectedProducto} onSuccess={() => { setEditOpen(false); loadData(); }} />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Reabastecer */}
+      {selectedProducto && (
+        <Dialog open={restockOpen} onOpenChange={setRestockOpen}>
+          <DialogContent className="max-w-sm"><DialogHeader><DialogTitle className="flex items-center gap-2"><PackagePlus className="h-5 w-5" /> Reabastecer</DialogTitle></DialogHeader>
+            <RestockForm producto={selectedProducto} onSuccess={() => { setRestockOpen(false); loadData(); }} />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
 
+// ══════════════════════════════════════
+// FORMULARIO NUEVO PRODUCTO
+// ══════════════════════════════════════
 function NuevoProductoForm({ onSuccess }: { onSuccess: () => void }) {
-  const [form, setForm] = useState({
-    sku: "",
-    nombre: "",
-    descripcion: "",
-    precioBase: 0,
-    stockInicial: 10,   // <-- stock real con el que se abre el producto
-    stockMinimo: 5,     // <-- umbral de alerta
-    imagenUrl: "",
-    esInsumo: false,
-    esTienda: true,
-    unidadMedida: "unidad",
-    categoriaId: "",
-  });
+  const [form, setForm] = useState({ sku: "", nombre: "", descripcion: "", precioBase: 0, stockInicial: 10, stockMinimo: 5, imagenUrl: "", esInsumo: false, esTienda: true, unidadMedida: "unidad", categoriaId: "" });
   const [loading, setLoading] = useState(false);
   const [categorias, setCategorias] = useState<any[]>([]);
-
-  useEffect(() => {
-    api.get("/inventory/categorias")
-      .then(({ data }) => setCategorias(data.data || []))
-      .catch(() => {});
-  }, []);
+  useEffect(() => { api.get("/inventory/categorias").then(({ data }) => setCategorias(data.data || [])).catch(() => {}); }, []);
 
   const handleSubmit = async () => {
-    if (!form.sku.trim()) { toast.error("El SKU es obligatorio"); return; }
-    if (!form.nombre.trim()) { toast.error("El nombre es obligatorio"); return; }
-    if (form.precioBase <= 0) { toast.error("El precio debe ser mayor a 0"); return; }
-    if (form.stockInicial < 0) { toast.error("El stock inicial no puede ser negativo"); return; }
-    if (form.stockMinimo < 0) { toast.error("El stock mínimo no puede ser negativo"); return; }
-
+    if (!form.sku.trim()) return toast.error("SKU obligatorio");
+    if (!form.nombre.trim()) return toast.error("Nombre obligatorio");
+    if (form.precioBase <= 0) return toast.error("Precio debe ser mayor a 0");
     setLoading(true);
     try {
-      await api.post("/inventory/productos", {
-        ...form,
-        categoriaId: form.categoriaId ? parseInt(form.categoriaId) : undefined,
-      });
-      toast.success("Producto creado exitosamente");
-      onSuccess();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || "Error al crear producto");
-    } finally { setLoading(false); }
+      await api.post("/inventory/productos", { ...form, categoriaId: form.categoriaId ? parseInt(form.categoriaId) : undefined });
+      toast.success("Producto creado"); onSuccess();
+    } catch (e: any) { toast.error(e.response?.data?.message || "Error"); }
+    finally { setLoading(false); }
   };
 
-  const alertaPreview = form.stockInicial < form.stockMinimo;
-  const enMinimoPreview = form.stockInicial === form.stockMinimo;
-
- return (
-    <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
-      {/* Tipo de producto */}
-      <div className="bg-secondary/30 rounded-xl p-3">
-        <Label className="text-sm font-extrabold mb-2 block">Tipo de Producto</Label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className={`flex items-center gap-2 p-3 rounded-xl border-3 cursor-pointer transition-all ${
-            form.esTienda ? "border-primary bg-primary/10" : "border-foreground/30"
-          }`}>
-            <input
-              type="checkbox"
-              checked={form.esTienda}
-              onChange={e => setForm({...form, esTienda: e.target.checked})}
-              className="h-5 w-5 rounded accent-primary"
-            />
-            <div>
-              <p className="text-sm font-bold">Tienda</p>
-              <p className="text-[10px] text-foreground/50">Visible para clientes</p>
-            </div>
-          </label>
-          <label className={`flex items-center gap-2 p-3 rounded-xl border-3 cursor-pointer transition-all ${
-            form.esInsumo ? "border-accent bg-accent/10" : "border-foreground/30"
-          }`}>
-            <input
-              type="checkbox"
-              checked={form.esInsumo}
-              onChange={e => setForm({...form, esInsumo: e.target.checked})}
-              className="h-5 w-5 rounded accent-accent"
-            />
-            <div>
-              <p className="text-sm font-bold">Insumo Técnico</p>
-              <p className="text-[10px] text-foreground/50">Uso interno grooming</p>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      {/* Datos básicos */}
+  return (
+    <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label>SKU *</Label>
-          <Input value={form.sku} onChange={e => setForm({...form, sku: e.target.value})} placeholder="SHAMP-001" />
-        </div>
-        <div>
-          <Label>Nombre *</Label>
-          <Input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} placeholder="Shampoo Premium" />
-        </div>
+        <div><Label>SKU *</Label><Input value={form.sku} onChange={e => setForm({...form, sku: e.target.value})} placeholder="SHAMP-001" /></div>
+        <div><Label>Nombre *</Label><Input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} /></div>
       </div>
-
-      {/* Categoría — cargada desde la BD */}
       <div>
         <Label>Categoría</Label>
-        <select
-          value={form.categoriaId}
-          onChange={e => setForm({...form, categoriaId: e.target.value})}
-          className="w-full h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold"
-        >
+        <select value={form.categoriaId} onChange={e => setForm({...form, categoriaId: e.target.value})} className="w-full h-11 rounded-xl border-3 border-foreground bg-white px-4 font-bold text-sm">
           <option value="">Sin categoría</option>
-          {categorias.map(c => (
-            <option key={c.id} value={c.id}>{c.nombre}</option>
-          ))}
+          {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </select>
       </div>
-
-      {/* Unidad de medida (solo para insumos) */}
-      {form.esInsumo && (
-        <div>
-          <Label>Unidad de Medida</Label>
-          <select
-            value={form.unidadMedida}
-            onChange={e => setForm({...form, unidadMedida: e.target.value})}
-            className="w-full h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold"
-          >
-            <option value="unidad">Unidad</option>
-            <option value="ml">Mililitros (ml)</option>
-            <option value="gr">Gramos (gr)</option>
-            <option value="par">Par</option>
-            <option value="dosis">Dosis</option>
-            <option value="sobre">Sobre</option>
-          </select>
-        </div>
-      )}
-
-      {/* Imagen */}
-      <div>
-        <Label>Imagen del producto</Label>
-        <ImageUpload
-          label="Subir imagen"
-          onUpload={(url) => setForm({...form, imagenUrl: url})}
-        />
-        {form.imagenUrl && (
-          <p className="text-xs text-primary mt-1 font-semibold">✓ Imagen cargada</p>
-        )}
+      <div className="grid grid-cols-2 gap-2">
+        <label className={`flex items-center gap-2 p-3 rounded-xl border-3 cursor-pointer ${form.esTienda ? "border-primary bg-primary/10" : "border-foreground/30"}`}>
+          <input type="checkbox" checked={form.esTienda} onChange={e => setForm({...form, esTienda: e.target.checked})} className="accent-primary" />
+          <div><p className="text-sm font-bold">Tienda</p><p className="text-[10px] text-foreground/50">Visible para clientes</p></div>
+        </label>
+        <label className={`flex items-center gap-2 p-3 rounded-xl border-3 cursor-pointer ${form.esInsumo ? "border-accent bg-accent/10" : "border-foreground/30"}`}>
+          <input type="checkbox" checked={form.esInsumo} onChange={e => setForm({...form, esInsumo: e.target.checked})} className="accent-accent" />
+          <div><p className="text-sm font-bold">Insumo</p><p className="text-[10px] text-foreground/50">Uso grooming</p></div>
+        </label>
       </div>
-
-      {/* Descripción */}
-      <div>
-        <Label>Descripción</Label>
-        <textarea
-          className="w-full min-h-[60px] rounded-xl border-3 border-foreground bg-white p-3 text-sm"
-          value={form.descripcion}
-          onChange={e => setForm({...form, descripcion: e.target.value})}
-          placeholder="Descripción del producto..."
-        />
+      <div><Label>Imagen</Label><ImageUpload label="Subir imagen" onUpload={url => setForm({...form, imagenUrl: url})} /></div>
+      <div><Label>Descripción</Label><textarea className="w-full min-h-[56px] rounded-xl border-3 border-foreground bg-white p-3 text-sm" value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} /></div>
+      <div><Label>Precio (Bs.) *</Label><Input type="number" min={0} step={0.5} value={form.precioBase} onChange={e => setForm({...form, precioBase: parseFloat(e.target.value) || 0})} /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label className="text-xs">Stock Inicial</Label><Input type="number" min={0} value={form.stockInicial} onChange={e => setForm({...form, stockInicial: parseInt(e.target.value) || 0})} /></div>
+        <div><Label className="text-xs">Stock Mínimo</Label><Input type="number" min={0} value={form.stockMinimo} onChange={e => setForm({...form, stockMinimo: parseInt(e.target.value) || 0})} /></div>
       </div>
-
-      {/* Precio */}
-      <div>
-        <Label>Precio Base (Bs.) *</Label>
-        <Input
-          type="number"
-          min={0}
-          step={0.5}
-          value={form.precioBase}
-          onChange={e => setForm({...form, precioBase: parseFloat(e.target.value) || 0})}
-        />
-      </div>
-
-      {/* Stock — separado claramente en dos campos */}
-      <div className="bg-secondary/30 rounded-xl p-3 space-y-3">
-        <Label className="text-sm font-extrabold block">Stock</Label>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label className="text-xs">Stock Inicial <span className="text-foreground/50">(unidades que tienes ahora)</span></Label>
-            <Input
-              type="number"
-              min={0}
-              value={form.stockInicial}
-              onChange={e => setForm({...form, stockInicial: parseInt(e.target.value) || 0})}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Stock Mínimo <span className="text-foreground/50">(umbral de alerta)</span></Label>
-            <Input
-              type="number"
-              min={0}
-              value={form.stockMinimo}
-              onChange={e => setForm({...form, stockMinimo: parseInt(e.target.value) || 0})}
-            />
-          </div>
-        </div>
-        {/* Preview del estado de stock */}
-        {alertaPreview && (
-          <p className="text-xs font-bold text-rose flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3" /> El stock inicial está por debajo del mínimo — se creará con alerta activa.
-          </p>
-        )}
-        {enMinimoPreview && !alertaPreview && (
-          <p className="text-xs font-bold text-amber-600 flex items-center gap-1">
-            ⚠️ El stock inicial es igual al mínimo — se mostrará como "En mínimo" (sin alerta roja).
-          </p>
-        )}
-        {!alertaPreview && !enMinimoPreview && form.stockInicial > 0 && (
-          <p className="text-xs font-semibold text-primary flex items-center gap-1">
-            ✓ Stock saludable — {form.stockInicial} uds disponibles, alerta a partir de {form.stockMinimo} uds.
-          </p>
-        )}
-      </div>
-
-      {/* Resumen */}
-      <div className="bg-secondary/30 rounded-xl p-3 text-xs">
-        <p className="font-bold mb-1">Se creará:</p>
-        <ul className="space-y-0.5 text-foreground/70">
-          {form.esTienda && <li>✓ Producto de tienda — visible en catálogo para clientes</li>}
-          {form.esInsumo && <li>✓ Insumo técnico — asignable a sesiones de grooming</li>}
-          {!form.esTienda && !form.esInsumo && <li className="text-rose font-bold">⚠ Selecciona al menos un tipo de producto</li>}
-          {form.esTienda && form.esInsumo && <li className="text-primary font-bold">Stock compartido entre tienda e insumos</li>}
-        </ul>
-      </div>
-
       <DialogFooter>
-        <Button
-          onClick={handleSubmit}
-          disabled={loading || (!form.esTienda && !form.esInsumo)}
-          className="w-full"
-        >
+        <Button onClick={handleSubmit} disabled={loading || (!form.esTienda && !form.esInsumo)} className="w-full">
           {loading ? "Creando..." : "Crear Producto"}
         </Button>
       </DialogFooter>
     </div>
   );
 }
+
+// ══════════════════════════════════════
+// FORMULARIO EDITAR PRODUCTO
+// ══════════════════════════════════════
+function EditarProductoForm({ producto, onSuccess }: { producto: Producto; onSuccess: () => void }) {
+  const [form, setForm] = useState({
+    nombre: producto.nombre,
+    descripcion: producto.descripcion || "",
+    precioBase: Number(producto.precioBase),
+    stockMinimo: producto.stockMinimo,
+    imagenUrl: producto.imagenUrl || "",
+    categoriaId: producto.categoria?.id ? String(producto.categoria.id) : "",
+    esInsumo: producto.esInsumo ?? false,
+    esTienda: producto.esTienda ?? true,
+  });
+  const [loading, setLoading] = useState(false);
+  const [categorias, setCategorias] = useState<any[]>([]);
+  useEffect(() => { api.get("/inventory/categorias").then(({ data }) => setCategorias(data.data || [])).catch(() => {}); }, []);
+
+  const handleSubmit = async () => {
+    if (!form.nombre.trim()) return toast.error("Nombre obligatorio");
+    setLoading(true);
+    try {
+      await api.put(`/inventory/productos/${producto.id}`, {
+        ...form,
+        categoriaId: form.categoriaId ? parseInt(form.categoriaId) : null,
+      });
+      toast.success("Producto actualizado"); onSuccess();
+    } catch (e: any) { toast.error(e.response?.data?.message || "Error"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-2">
+      <div className="bg-secondary/30 rounded-xl px-3 py-2 text-xs font-mono text-foreground/50">SKU: {producto.sku} (no editable)</div>
+      <div><Label>Nombre *</Label><Input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} /></div>
+      <div>
+        <Label>Categoría</Label>
+        <select value={form.categoriaId} onChange={e => setForm({...form, categoriaId: e.target.value})} className="w-full h-11 rounded-xl border-3 border-foreground bg-white px-4 font-bold text-sm">
+          <option value="">Sin categoría</option>
+          {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+      </div>
+      <div><Label>Descripción</Label><textarea className="w-full min-h-[56px] rounded-xl border-3 border-foreground bg-white p-3 text-sm" value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label>Precio (Bs.) *</Label><Input type="number" min={0} step={0.5} value={form.precioBase} onChange={e => setForm({...form, precioBase: parseFloat(e.target.value) || 0})} /></div>
+        <div><Label>Stock Mínimo</Label><Input type="number" min={0} value={form.stockMinimo} onChange={e => setForm({...form, stockMinimo: parseInt(e.target.value) || 0})} /></div>
+      </div>
+      <div><Label>Imagen</Label><ImageUpload label="Cambiar imagen" currentImage={form.imagenUrl} onUpload={url => setForm({...form, imagenUrl: url})} /></div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className={`flex items-center gap-2 p-3 rounded-xl border-3 cursor-pointer ${form.esTienda ? "border-primary bg-primary/10" : "border-foreground/30"}`}>
+          <input type="checkbox" checked={form.esTienda} onChange={e => setForm({...form, esTienda: e.target.checked})} className="accent-primary" />
+          <div><p className="text-sm font-bold">Tienda</p></div>
+        </label>
+        <label className={`flex items-center gap-2 p-3 rounded-xl border-3 cursor-pointer ${form.esInsumo ? "border-accent bg-accent/10" : "border-foreground/30"}`}>
+          <input type="checkbox" checked={form.esInsumo} onChange={e => setForm({...form, esInsumo: e.target.checked})} className="accent-accent" />
+          <div><p className="text-sm font-bold">Insumo</p></div>
+        </label>
+      </div>
+      <DialogFooter>
+        <Button onClick={handleSubmit} disabled={loading} className="w-full">{loading ? "Guardando..." : "Guardar cambios"}</Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════
+// FORMULARIO REABASTECER
+// ══════════════════════════════════════
+function RestockForm({ producto, onSuccess }: { producto: Producto; onSuccess: () => void }) {
+  const stockActual = producto.variantes.reduce((s, v) => s + v.stockAdicional, 0);
+  const varianteDefault = producto.variantes[0];
+  const [cantidad, setCantidad] = useState(10);
+  const [varianteId, setVarianteId] = useState<number>(varianteDefault?.id || 0);
+  const [motivo, setMotivo] = useState("Reabastecimiento");
+  const [loading, setLoading] = useState(false);
+
+  const varianteSeleccionada = producto.variantes.find(v => v.id === varianteId);
+  const nuevoStock = (varianteSeleccionada?.stockAdicional || 0) + cantidad;
+  const quedaEnAlerta = nuevoStock < producto.stockMinimo;
+
+  const handleSubmit = async () => {
+    if (cantidad <= 0) return toast.error("La cantidad debe ser mayor a 0");
+    if (!varianteId) return toast.error("Selecciona una variante");
+    setLoading(true);
+    try {
+      // En el handleSubmit:
+      await api.put(`/inventory/variantes/${varianteId}/stock`, { 
+        cantidad: cantidad,  // 👈 Positivo
+        tipo: "entrada",     // 👈 Explícito
+        motivo: motivo || "Reabastecimiento"
+      });
+      toast.success(`+${cantidad} unidades agregadas a ${producto.nombre}`);
+      onSuccess();
+    } catch (e: any) { toast.error(e.response?.data?.message || "Error al reabastecer"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Info producto */}
+      <div className="bg-secondary/30 rounded-xl p-3 space-y-1">
+        <p className="font-extrabold">{producto.nombre}</p>
+        <p className="text-xs font-mono text-foreground/50">{producto.sku}</p>
+        <div className="flex gap-4 text-xs mt-2">
+          <span>Stock actual: <strong className={stockActual < producto.stockMinimo ? "text-rose" : "text-primary"}>{stockActual} uds</strong></span>
+          <span>Mínimo: <strong>{producto.stockMinimo} uds</strong></span>
+        </div>
+      </div>
+
+      {/* Variante (si hay más de una) */}
+      {producto.variantes.length > 1 && (
+        <div>
+          <Label>Variante</Label>
+          <select value={varianteId} onChange={e => setVarianteId(parseInt(e.target.value))} className="w-full h-11 rounded-xl border-3 border-foreground bg-white px-4 font-bold text-sm">
+            {producto.variantes.map(v => (
+              <option key={v.id} value={v.id}>{v.atributo}: {v.valor} ({v.stockAdicional} uds)</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Cantidad */}
+      <div>
+        <Label>Cantidad a agregar</Label>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setCantidad(c => Math.max(1, c - 1))} className="h-11 w-11 rounded-xl border-3 border-foreground font-extrabold text-lg hover:bg-secondary/50">−</button>
+          <Input type="number" min={1} value={cantidad} onChange={e => setCantidad(parseInt(e.target.value) || 1)} className="text-center text-xl font-extrabold" />
+          <button onClick={() => setCantidad(c => c + 1)} className="h-11 w-11 rounded-xl border-3 border-foreground font-extrabold text-lg hover:bg-secondary/50">+</button>
+        </div>
+        {/* Accesos rápidos */}
+        <div className="flex gap-2 mt-2">
+          {[5, 10, 25, 50].map(n => (
+            <button key={n} onClick={() => setCantidad(n)} className={`flex-1 py-1.5 rounded-lg border-2 text-xs font-bold transition-all ${cantidad === n ? "border-primary bg-primary/10" : "border-foreground/30 hover:bg-secondary/50"}`}>+{n}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Motivo */}
+      <div>
+        <Label>Motivo</Label>
+        <select value={motivo} onChange={e => setMotivo(e.target.value)} className="w-full h-11 rounded-xl border-3 border-foreground bg-white px-4 font-bold text-sm">
+          <option value="Reabastecimiento">Reabastecimiento regular</option>
+          <option value="Compra">Compra a proveedor</option>
+          <option value="Donación">Donación / Regalo</option>
+          <option value="Devolución">Devolución de cliente</option>
+          <option value="Ajuste">Ajuste de inventario</option>
+        </select>
+      </div>
+
+      {/* Preview */}
+      <div className={`rounded-xl p-3 border-2 text-sm ${quedaEnAlerta ? "bg-rose/10 border-rose" : "bg-primary/10 border-primary"}`}>
+        <p className="font-bold mb-1">{quedaEnAlerta ? "⚠️ Seguirá en alerta" : "✓ Quedará en stock saludable"}</p>
+        <div className="flex justify-between text-xs">
+          <span>Stock actual: {varianteSeleccionada?.stockAdicional || 0} uds</span>
+          <span>+ {cantidad} uds</span>
+          <span className="font-extrabold">= {nuevoStock} uds</span>
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button onClick={handleSubmit} disabled={loading} className="w-full">
+          {loading ? "Abasteciendo..." : `Agregar ${cantidad} unidades`}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+} 

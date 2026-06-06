@@ -877,5 +877,4 @@ static async configurarInsumosServicio(
       }))
       .sort((a, b) => a.porcentaje - b.porcentaje);
   }
-
 }
