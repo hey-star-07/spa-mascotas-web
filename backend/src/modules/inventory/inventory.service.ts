@@ -804,6 +804,22 @@ static async configurarInsumosServicio(
           valor: v.valor,
           stockAdicional: v.stockAdicional,
         })),
+
+        recomendacion: (() => {
+          const stockTotal = p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0);
+          const minimo = p.stockMinimo;
+          
+          if (stockTotal === 0) {
+            return `URGENTE: Comprar inmediatamente. Stock agotado. Se necesitan al menos ${minimo} unidades.`;
+          } else if (stockTotal <= minimo * 0.25) {
+            return `Crítico: Comprar esta semana. Solo queda ${stockTotal} de ${minimo} unidades mínimas.`;
+          } else if (stockTotal <= minimo * 0.5) {
+            return `Comprar pronto. Stock por debajo del 50% del mínimo (${stockTotal}/${minimo}).`;
+          } else if (stockTotal <= minimo) {
+            return `Planificar compra. Stock cercano al mínimo (${stockTotal}/${minimo}).`;
+          }
+          return '';
+        })(),
       }))
       .sort((a, b) => a.porcentaje - b.porcentaje);
   }
@@ -842,6 +858,22 @@ static async configurarInsumosServicio(
           valor: v.valor,
           stockAdicional: v.stockAdicional,
         })),
+
+        recomendacion: (() => {
+          const stockTotal = p.variantes.reduce((sum, v) => sum + v.stockAdicional, 0);
+          const minimo = p.stockMinimo;
+          
+          if (stockTotal === 0) {
+            return `URGENTE: Comprar inmediatamente. Stock agotado. Se necesitan al menos ${minimo} unidades.`;
+          } else if (stockTotal <= minimo * 0.25) {
+            return `Crítico: Comprar esta semana. Solo queda ${stockTotal} de ${minimo} unidades mínimas.`;
+          } else if (stockTotal <= minimo * 0.5) {
+            return `Comprar pronto. Stock por debajo del 50% del mínimo (${stockTotal}/${minimo}).`;
+          } else if (stockTotal <= minimo) {
+            return `Planificar compra. Stock cercano al mínimo (${stockTotal}/${minimo}).`;
+          }
+          return '';
+        })(),
       }))
       .sort((a, b) => a.porcentaje - b.porcentaje);
   }

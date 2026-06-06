@@ -21,6 +21,7 @@ interface AlertaProducto {
   porcentaje: number;
   urgencia: string;
   unidadMedida?: string;
+  recomendacion?: string;
   variantes: Array<{ id: number; atributo: string; valor: string; stockAdicional: number }>;
 }
 
@@ -129,7 +130,7 @@ export default function InventoryAlertsPage() {
         </div>
       )}
 
-      {/* Lista de alertas */}
+      {/* Lista de alertas mejorada */}
       {alertasActuales.length === 0 ? (
         <EmptyState
           icon={activeTab === "tienda" ? <ShoppingBag className="h-12 w-12" /> : <Scissors className="h-12 w-12" />}
@@ -137,100 +138,164 @@ export default function InventoryAlertsPage() {
           description={`Todos los ${activeTab === "tienda" ? "productos de tienda" : "insumos técnicos"} tienen stock suficiente.`}
         />
       ) : (
-        <div className="space-y-3">
-          {alertasActuales.map((a) => (
-            <Card key={a.id} className={`hover:shadow-cartoon-hover transition-all ${
-              a.urgencia === 'Crítica' ? 'border-rose bg-rose/5' : 
-              a.urgencia === 'Alta' ? 'border-accent bg-accent/5' : ''
-            }`}>
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`rounded-xl border-3 border-foreground p-3 ${
-                      a.urgencia === 'Crítica' ? 'bg-rose/30' : 
-                      a.urgencia === 'Alta' ? 'bg-accent/30' : 'bg-secondary/30'
-                    }`}>
-                      {activeTab === "tienda" ? (
-                        <ShoppingBag className="h-6 w-6" />
-                      ) : (
-                        <Scissors className="h-6 w-6" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-extrabold text-lg">{a.nombre}</p>
-                        <Badge className={urgenciaColor[a.urgencia] || "bg-gray-200"}>
-                          {a.urgencia}
-                        </Badge>
-                        {activeTab === "insumos" && a.unidadMedida && (
-                          <Badge variant="outline" className="text-[10px]">{a.unidadMedida}</Badge>
+        <div className="space-y-4">
+          {alertasActuales.map((a) => {
+            const porcentajeStock = a.stockMinimo > 0 
+              ? Math.round((a.stockActual / (a.stockMinimo * 2)) * 100) 
+              : 0;
+            const barraColor = a.urgencia === 'Crítica' ? 'bg-rose' : a.urgencia === 'Alta' ? 'bg-accent' : 'bg-secondary';
+            
+            return (
+              <Card key={a.id} className={`hover:shadow-cartoon-hover transition-all overflow-hidden ${
+                a.urgencia === 'Crítica' ? 'border-rose border-3' : 
+                a.urgencia === 'Alta' ? 'border-accent border-3' : ''
+              }`}>
+                {/* Barra de urgencia superior */}
+                <div className={`h-2 w-full ${
+                  a.urgencia === 'Crítica' ? 'bg-rose' : 
+                  a.urgencia === 'Alta' ? 'bg-accent' : 'bg-secondary'
+                }`} />
+                
+                <CardContent className="py-5">
+                  <div className="flex items-start justify-between flex-wrap gap-4">
+                    {/* Info principal */}
+                    <div className="flex items-start gap-4 flex-1">
+                      <div className={`rounded-xl border-3 border-foreground p-4 ${
+                        a.urgencia === 'Crítica' ? 'bg-rose/20' : 
+                        a.urgencia === 'Alta' ? 'bg-accent/20' : 'bg-secondary/30'
+                      }`}>
+                        {activeTab === "tienda" ? (
+                          <ShoppingBag className="h-8 w-8" />
+                        ) : (
+                          <Scissors className="h-8 w-8" />
                         )}
                       </div>
-                      <p className="text-xs font-mono text-foreground/50">SKU: {a.sku}</p>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="flex items-center gap-2">
-                      <TrendingDown className="h-4 w-4 text-rose" />
-                      <p className="text-sm">
-                        Stock: <span className="font-extrabold text-rose">{a.stockActual}</span>
-                        <span className="text-foreground/50"> / {a.stockMinimo} mín</span>
-                      </p>
-                    </div>
-                    {/* Barra de progreso */}
-                    <div className="flex gap-0.5 mt-1.5 max-w-[150px] ml-auto">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className={`h-2 flex-1 rounded-full border border-foreground/20 transition-all ${
-                            i < Math.ceil((a.stockActual / Math.max(a.stockMinimo * 2, 1)) * 5)
-                              ? a.stockActual <= a.stockMinimo ? 'bg-rose' : 'bg-accent'
-                              : 'bg-gray-200'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-foreground/50 mt-0.5">
-                      {a.porcentaje}% del stock mínimo
-                    </p>
-                  </div>
-                </div>
-
-                {/* Variantes */}
-                {a.variantes.length > 0 && (
-                  <div className="mt-3 pt-3 border-t-2 border-foreground/20">
-                    <p className="text-xs font-bold mb-1">Variantes:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {a.variantes.map(v => (
-                        <div key={v.id} className={`px-2 py-1 rounded-lg text-xs border ${
-                          v.stockAdicional === 0 ? 'border-rose bg-rose/10' :
-                          v.stockAdicional <= a.stockMinimo ? 'border-accent bg-accent/10' : 'border-foreground/20'
-                        }`}>
-                          <span className="font-bold">{v.valor}</span>
-                          <span className="ml-1 text-foreground/50">({v.stockAdicional})</span>
+                      
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap mb-2">
+                          <h3 className="text-xl font-extrabold">{a.nombre}</h3>
+                          <Badge className={`text-xs ${urgenciaColor[a.urgencia] || "bg-gray-200"}`}>
+                            {a.urgencia}
+                          </Badge>
+                          {activeTab === "insumos" && a.unidadMedida && (
+                            <Badge variant="outline" className="text-[10px]">{a.unidadMedida}</Badge>
+                          )}
                         </div>
-                      ))}
+                        <p className="text-xs font-mono text-foreground/50 mb-3">SKU: {a.sku}</p>
+
+                        {/* Barra de progreso GRANDE y visible */}
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm font-bold">
+                            <span className="flex items-center gap-1">
+                              <TrendingDown className="h-4 w-4 text-rose" />
+                              Stock actual:
+                            </span>
+                            <span className={`text-lg ${a.stockActual === 0 ? 'text-rose' : 'text-foreground'}`}>
+                              <strong>{a.stockActual}</strong>
+                              <span className="text-sm text-foreground/50"> / {a.stockMinimo} mínimo</span>
+                            </span>
+                          </div>
+                          
+                          {/* Barra de progreso visual */}
+                          <div className="relative h-8 bg-gray-100 rounded-xl border-2 border-foreground overflow-hidden">
+                            {/* Barra de stock actual */}
+                            <div
+                              className={`h-full rounded-xl transition-all duration-500 flex items-center justify-end pr-2 ${
+                                porcentajeStock <= 25 ? 'bg-rose' : 
+                                porcentajeStock <= 50 ? 'bg-accent' : 'bg-primary'
+                              }`}
+                              style={{ width: `${Math.min(porcentajeStock, 100)}%` }}
+                            >
+                              {porcentajeStock > 15 && (
+                                <span className="text-xs font-extrabold text-white drop-shadow">
+                                  {porcentajeStock}%
+                                </span>
+                              )}
+                            </div>
+                            {/* Línea de stock mínimo */}
+                            <div 
+                              className="absolute top-0 h-full w-1 bg-foreground/50 border-r-2 border-foreground"
+                              style={{ left: '50%' }}
+                              title="Nivel mínimo"
+                            />
+                            {/* Etiquetas */}
+                            <div className="absolute top-0 left-0 w-full h-full flex items-center justify-between px-2 pointer-events-none">
+                              <span className="text-[8px] font-bold text-foreground/40">0</span>
+                              <span className="text-[8px] font-bold text-foreground/40">Mín</span>
+                              <span className="text-[8px] font-bold text-foreground/40">Óptimo</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex justify-between text-[10px] text-foreground/50">
+                            <span>0%</span>
+                            <span>Stock mínimo (50%)</span>
+                            <span>100%</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                )}
 
-                {/* Acción */}
-                <div className="mt-3 flex gap-2">
-                  <Link href={`/inventory`} className="flex-1">
-                    <Button size="sm" variant="outline" className="w-full text-xs">
-                      <Package className="mr-1 h-3 w-3" /> Ir a Inventario
-                    </Button>
-                  </Link>
-                  {a.urgencia === 'Crítica' && (
-                    <Button size="sm" variant="destructive" className="text-xs">
-                      Comprar ahora
-                    </Button>
+                  {/* Variantes */}
+                  {a.variantes.length > 0 && (
+                    <div className="mt-4 pt-3 border-t-2 border-foreground/20">
+                      <p className="text-xs font-bold mb-2">Desglose por variante:</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {a.variantes.map(v => (
+                          <div key={v.id} className={`p-2 rounded-lg border-2 text-center ${
+                            v.stockAdicional === 0 ? 'border-rose bg-rose/10' :
+                            v.stockAdicional <= a.stockMinimo / 2 ? 'border-accent bg-accent/10' : 'border-foreground/20'
+                          }`}>
+                            <p className="text-xs font-bold">{v.valor}</p>
+                            <p className={`text-lg font-extrabold ${v.stockAdicional === 0 ? 'text-rose' : ''}`}>
+                              {v.stockAdicional}
+                            </p>
+                            <p className="text-[9px] text-foreground/50">unidades</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                  {/* RECOMENDACIÓN DE REABASTECIMIENTO */}
+                  {a.recomendacion && (
+                    <div className={`mt-4 p-4 rounded-xl border-2 ${
+                      a.urgencia === 'Crítica' ? 'bg-rose/10 border-rose' :
+                      a.urgencia === 'Alta' ? 'bg-accent/10 border-accent' : 'bg-secondary/30 border-foreground/30'
+                    }`}>
+                      <div className="flex items-start gap-2">
+                        <ShoppingBag className={`h-5 w-5 flex-shrink-0 mt-0.5 ${
+                          a.urgencia === 'Crítica' ? 'text-rose' : 
+                          a.urgencia === 'Alta' ? 'text-accent' : 'text-foreground/50'
+                        }`} />
+                        <div>
+                          <p className={`text-sm font-extrabold mb-1 ${
+                            a.urgencia === 'Crítica' ? 'text-rose' : 
+                            a.urgencia === 'Alta' ? 'text-accent' : ''
+                          }`}>
+                            Recomendación de reabastecimiento:
+                          </p>
+                          <p className="text-sm font-semibold">{a.recomendacion}</p>
+                          <div className="flex gap-2 mt-3">
+                            <Link href="/inventory" className="flex-1">
+                              <Button size="sm" variant="outline" className="w-full text-xs">
+                                <Package className="mr-1 h-3 w-3" /> Gestionar Inventario
+                              </Button>
+                            </Link>
+                            {a.urgencia === 'Crítica' && (
+                              <Button size="sm" variant="destructive" className="text-xs">
+                                <ShoppingBag className="mr-1 h-3 w-3" /> Comprar Ahora
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
