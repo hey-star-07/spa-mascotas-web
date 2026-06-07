@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ShoppingBag, Search, Plus, Minus, ShoppingCart, Package } from "lucide-react";
@@ -18,10 +19,18 @@ interface Producto {
   nombre: string;
   sku: string;
   precioBase: number;
+  precioPromocional?: number | null;  
+  enPromocion?: boolean;              
   imagenUrl: string | null;
   descripcion: string | null;
   categoria: { nombre: string } | null;
-  variantes: Array<{ id: number; atributo: string; valor: string; stockAdicional: number; precioExtra: number }>;
+  variantes: Array<{ 
+    id: number; 
+    atributo: string; 
+    valor: string; 
+    stockAdicional: number; 
+    precioExtra: number;
+  }>;
 }
 
 export default function StorePage() {
@@ -31,15 +40,30 @@ export default function StorePage() {
   const [search, setSearch] = useState("");
   const [cartCount, setCartCount] = useState(0);
   const [cantidad, setCantidad] = useState(1);
+  const [categorias, setCategorias] = useState<any[]>([]);
+  const [categoriaFilter, setCategoriaFilter] = useState("");
+  const [selectedVariante, setSelectedVariante] = useState<Record<number, number>>({});
 
   useEffect(() => {
     loadProductos();
     loadCartCount();
-  }, [search]);
+  }, [search, categoriaFilter]);
+
+  // Cargar categorías al montar
+  useEffect(() => {
+    api.get("/inventory/categorias")
+      .then(({ data }) => setCategorias(data.data || []))
+      .catch(() => {});
+  }, []);
 
   const loadProductos = async () => {
     try {
-      const { data } = await api.get("/store/catalogo", { params: { search: search || undefined } });
+      const { data } = await api.get("/store/catalogo", { 
+        params: { 
+          search: search || undefined,
+          categoriaId: categoriaFilter || undefined, 
+        } 
+      });
       setProductos(data.data || []);
     } catch { toast.error("Error al cargar catálogo"); }
     finally { setLoading(false); }
@@ -86,6 +110,19 @@ export default function StorePage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-foreground/50" />
             <Input placeholder="Buscar producto..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
           </div>
+          
+          {/* 👇 FILTRO POR CATEGORÍA */}
+          <select
+            value={categoriaFilter}
+            onChange={e => setCategoriaFilter(e.target.value)}
+            className="h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold text-sm"
+          >
+            <option value="">Todas las categorías</option>
+            {categorias.map((c: any) => (
+              <option key={c.id} value={c.id}>{c.nombre}</option>
+            ))}
+          </select>
+
           <Button onClick={() => router.push("/store/cart")} className="relative">
             <ShoppingCart className="mr-2 h-5 w-5" /> Carrito
             {cartCount > 0 && (
@@ -136,14 +173,19 @@ export default function StorePage() {
                     <p className="text-xs text-foreground/70 line-clamp-2">{p.descripcion}</p>
                   )}
                   
-                  {/* Precio y stock */}
-                  <div className="flex items-center justify-between">
-                    <div>
+                  {/* Precio */}
+                  <div className="flex items-center gap-2">
+                    {p.enPromocion && p.precioPromocional ? (
+                      <>
+                        <p className="text-xl font-extrabold text-rose">Bs. {Number(p.precioPromocional).toFixed(2)}</p>
+                        <p className="text-sm text-foreground/50 line-through">Bs. {Number(p.precioBase).toFixed(2)}</p>
+                        <Badge variant="destructive" className="text-[10px]">
+                          -{Math.round((1 - Number(p.precioPromocional) / Number(p.precioBase)) * 100)}%
+                        </Badge>
+                      </>
+                    ) : (
                       <p className="text-xl font-extrabold">Bs. {Number(p.precioBase).toFixed(2)}</p>
-                      <p className="text-[10px] text-foreground/50">
-                        Stock: {stockTotal} uds
-                      </p>
-                    </div>
+                    )}
                   </div>
 
                   {/* Selector de cantidad y botón agregar */}
@@ -168,7 +210,11 @@ export default function StorePage() {
                     <Button
                       size="sm"
                       variant="accent"
-                      onClick={() => addToCart(p.id, p.variantes[0]?.id, cantidad)}
+                      onClick={() => addToCart(
+                        p.id, 
+                        selectedVariante[p.id] || p.variantes[0]?.id, 
+                        cantidad
+                      )}
                       disabled={stockTotal === 0}
                       className="flex-shrink-0"
                     >
@@ -179,6 +225,26 @@ export default function StorePage() {
                   {/* Variantes */}
                   {p.variantes.length > 1 && (
                     <p className="text-[10px] text-foreground/50">{p.variantes.length} variantes disponibles</p>
+                  )}
+                  {/* Selector de variante */}
+                  {p.variantes.length > 1 && (
+                    <div className="space-y-1">
+                      <Label className="text-[10px]">Variante:</Label>
+                      <select
+                        value={selectedVariante?.[p.id] || p.variantes[0]?.id || ""}
+                        onChange={(e) => {
+                          setSelectedVariante({ ...selectedVariante, [p.id]: parseInt(e.target.value) });
+                        }}
+                        className="w-full h-9 rounded-lg border-2 border-foreground bg-white px-2 text-xs font-bold"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {p.variantes.map((v: any) => (
+                          <option key={v.id} value={v.id}>
+                            {v.valor} {v.precioExtra > 0 ? `(+Bs. ${v.precioExtra})` : ''} - {v.stockAdicional}u
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </CardContent>
               </Card>

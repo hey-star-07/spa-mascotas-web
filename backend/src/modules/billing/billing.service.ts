@@ -168,6 +168,17 @@ export class BillingService {
         estado: 'Completado',
       },
     });
+    // Sumar puntos por compra (1 punto por cada Bs. 10)
+    if (factura.pedidoId) {
+      const puntosGanados = Math.floor(data.monto / 10);
+      await prisma.cliente.update({
+        where: { id: factura.clienteId },
+        data: {
+          puntosFidelidad: { increment: puntosGanados },
+          totalCompras: { increment: data.monto },
+        },
+      });
+    }
 
     // Actualizar estado de la factura
     const totalPagado = pagosPrevios + data.monto;

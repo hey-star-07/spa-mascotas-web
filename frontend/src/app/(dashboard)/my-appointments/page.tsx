@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
-import { Calendar, Plus, Dog, Clock, XCircle, AlertTriangle, CheckCircle, Filter } from "lucide-react";
+import { Calendar, Plus, Dog, Clock, XCircle, AlertTriangle, CheckCircle, Star, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -23,9 +23,19 @@ interface Appointment {
   mascota: { id: number; nombre: string; imagen: string | null };
   servicio: { nombre: string; precioBase: number };
   groomer: { usuario: { nombre: string; apellido: string } } | null;
+  encuestaRealizada?: boolean;
 }
 
 type TabFiltro = "todas" | "pendientes" | "confirmadas" | "completadas" | "canceladas";
+
+// Preguntas predefinidas para la encuesta
+const PREGUNTAS_PREDEFINIDAS = [
+  { id: "atencion", pregunta: "¿Cómo calificas la atención del groomer?" },
+  { id: "resultado", pregunta: "¿Quedaste satisfecho con el resultado del servicio?" },
+  { id: "instalaciones", pregunta: "¿Las instalaciones estaban limpias y ordenadas?" },
+  { id: "tiempo", pregunta: "¿Se cumplió con el tiempo estimado del servicio?" },
+  { id: "recomendaria", pregunta: "¿Recomendarías Pet Spa a otros dueños de mascotas?" },
+];
 
 export default function MyAppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -36,6 +46,15 @@ export default function MyAppointmentsPage() {
   const [motivoCancelacion, setMotivoCancelacion] = useState("");
   const [aceptaPolitica, setAceptaPolitica] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+
+  // 👇 ESTADOS DE ENCUESTA
+  const [encuestaOpen, setEncuestaOpen] = useState(false);
+  const [encuestaCitaId, setEncuestaCitaId] = useState<number | null>(null);
+  const [puntuacion, setPuntuacion] = useState(0);
+  const [hoverPuntuacion, setHoverPuntuacion] = useState(0);
+  const [comentario, setComentario] = useState("");
+  const [respuestasPreguntas, setRespuestasPreguntas] = useState<Record<string, number>>({});
+  const [enviandoEncuesta, setEnviandoEncuesta] = useState(false);
 
   const loadAppointments = () => {
     setLoading(true);
@@ -90,6 +109,42 @@ export default function MyAppointmentsPage() {
       toast.error(error.response?.data?.message || "Error al cancelar");
     } finally {
       setCancelling(false);
+    }
+  };
+
+  // 👇 ABRIR ENCUESTA
+  const openEncuesta = (citaId: number) => {
+    setEncuestaCitaId(citaId);
+    setPuntuacion(0);
+    setHoverPuntuacion(0);
+    setComentario("");
+    setRespuestasPreguntas({});
+    setEncuestaOpen(true);
+  };
+
+  // 👇 ENVIAR ENCUESTA
+  const handleEnviarEncuesta = async () => {
+    if (puntuacion === 0) {
+      toast.error("Selecciona una puntuación");
+      return;
+    }
+    if (!encuestaCitaId) return;
+
+    setEnviandoEncuesta(true);
+    try {
+      await api.post("/reports/encuesta", {
+        citaId: encuestaCitaId,
+        puntuacion,
+        comentario: comentario || undefined,
+        preguntas: Object.keys(respuestasPreguntas).length > 0 ? respuestasPreguntas : undefined,
+      });
+      toast.success("¡Gracias por tu opinión!");
+      setEncuestaOpen(false);
+      loadAppointments();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Error al enviar encuesta");
+    } finally {
+      setEnviandoEncuesta(false);
     }
   };
 
@@ -168,7 +223,6 @@ export default function MyAppointmentsPage() {
               <Card key={a.id} className={`hover:shadow-cartoon-hover transition-all ${isCancelled ? 'opacity-60' : ''}`}>
                 <CardContent className="flex items-center justify-between py-4 flex-wrap gap-3">
                   <div className="flex items-center gap-3">
-                    {/* Fecha */}
                     <div className="text-center min-w-[70px]">
                       <p className="text-lg font-extrabold">
                         {format(parseISO(a.fechaHoraInicio), "dd", { locale: es })}
@@ -194,7 +248,6 @@ export default function MyAppointmentsPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {/* Estado */}
                     {isPending ? (
                       <Badge className="bg-accent">En Revisión</Badge>
                     ) : isCancelled ? (
@@ -205,7 +258,18 @@ export default function MyAppointmentsPage() {
                       <Badge variant="secondary">{a.estado}</Badge>
                     )}
 
-                    {/* Botón cancelar */}
+                    {/* 👇 BOTÓN DE ENCUESTA PARA COMPLETADAS */}
+                    {isCompleted && !a.encuestaRealizada && (
+                      <Button size="sm" variant="secondary" onClick={() => openEncuesta(a.id)}>
+                        <Star className="mr-1 h-3 w-3" /> Calificar
+                      </Button>
+                    )}
+                    {isCompleted && a.encuestaRealizada && (
+                      <Badge className="bg-amber-400/20 text-amber-700 border border-amber-400">
+                        <Star className="mr-1 h-3 w-3 fill-amber-400" /> Calificado
+                      </Badge>
+                    )}
+
                     {canCancel && (
                       <Button size="sm" variant="destructive" onClick={() => handleCancelClick(a)}>
                         <XCircle className="h-4 w-4" />
@@ -219,7 +283,9 @@ export default function MyAppointmentsPage() {
         </div>
       )}
 
-      {/* Diálogo de Cancelación */}
+      {/* ============================================ */}
+      {/* DIÁLOGO DE CANCELACIÓN                         */}
+      {/* ============================================ */}
       <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <DialogContent>
           <DialogHeader>
@@ -249,9 +315,9 @@ export default function MyAppointmentsPage() {
             <div className="bg-rose/10 border-2 border-rose rounded-xl p-3">
               <p className="text-sm font-extrabold text-rose mb-1">Política de Cancelación</p>
               <ul className="text-xs space-y-1">
-                <li>• Cancelar con al menos 24 horas de anticipación.</li>
-                <li>• Cancelaciones tardías pueden generar un cargo.</li>
-                <li>• Al cancelar, el slot se libera para otros clientes.</li>
+                <li>Cancelar con al menos 24 horas de anticipación.</li>
+                <li>Cancelaciones tardías pueden generar un cargo.</li>
+                <li>Al cancelar, el slot se libera para otros clientes.</li>
               </ul>
             </div>
             <label className="flex items-start gap-3 cursor-pointer p-3 border-2 border-foreground rounded-xl">
@@ -263,6 +329,97 @@ export default function MyAppointmentsPage() {
             <Button variant="outline" onClick={() => setCancelOpen(false)} disabled={cancelling}>Mantener Cita</Button>
             <Button variant="destructive" onClick={handleCancelConfirm} disabled={cancelling || !aceptaPolitica}>
               {cancelling ? "Cancelando..." : "Confirmar Cancelación"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================ */}
+      {/* 👇 DIÁLOGO DE ENCUESTA DE SATISFACCIÓN        */}
+      {/* ============================================ */}
+      <Dialog open={encuestaOpen} onOpenChange={setEncuestaOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Star className="h-6 w-6 fill-amber-400 text-amber-400" /> Calificar Servicio
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5">
+            {/* Estrellas */}
+            <div className="text-center">
+              <p className="text-sm font-bold mb-3">¿Cómo calificarías el servicio?</p>
+              <div className="flex justify-center gap-1.5">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setPuntuacion(star)}
+                    onMouseEnter={() => setHoverPuntuacion(star)}
+                    onMouseLeave={() => setHoverPuntuacion(0)}
+                    className="transition-transform hover:scale-125"
+                  >
+                    <Star
+                      className={`h-10 w-10 transition-colors ${
+                        star <= (hoverPuntuacion || puntuacion)
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+              {puntuacion > 0 && (
+                <p className="text-sm font-bold mt-2 text-amber-600">
+                  {puntuacion === 5 ? '¡Excelente!' : puntuacion === 4 ? 'Muy bueno' : puntuacion === 3 ? 'Bueno' : puntuacion === 2 ? 'Regular' : 'Malo'}
+                </p>
+              )}
+            </div>
+
+            {/* Preguntas predefinidas */}
+            <div className="space-y-3">
+              <p className="text-sm font-bold flex items-center gap-1">
+                <MessageSquare className="h-4 w-4" /> Preguntas rápidas:
+              </p>
+              {PREGUNTAS_PREDEFINIDAS.map((pq) => (
+                <div key={pq.id} className="flex items-center justify-between">
+                  <span className="text-xs flex-1">{pq.pregunta}</span>
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setRespuestasPreguntas({ ...respuestasPreguntas, [pq.id]: star })}
+                        className="transition-transform hover:scale-110"
+                      >
+                        <Star
+                          className={`h-5 w-5 ${
+                            star <= (respuestasPreguntas[pq.id] || 0)
+                              ? 'fill-amber-400 text-amber-400'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Comentario */}
+            <div>
+              <Label>Comentario adicional (opcional)</Label>
+              <textarea
+                className="w-full min-h-[80px] rounded-xl border-3 border-foreground bg-white p-3 text-sm"
+                placeholder="Cuéntanos tu experiencia..."
+                value={comentario}
+                onChange={e => setComentario(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex gap-3">
+            <Button variant="outline" onClick={() => setEncuestaOpen(false)}>Cancelar</Button>
+            <Button onClick={handleEnviarEncuesta} disabled={enviandoEncuesta || puntuacion === 0} variant="accent">
+              {enviandoEncuesta ? "Enviando..." : "Enviar Calificación"}
             </Button>
           </DialogFooter>
         </DialogContent>

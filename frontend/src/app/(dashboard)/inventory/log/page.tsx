@@ -6,36 +6,38 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
-import { Package, Search, User, Dog, Scissors, Clock, TrendingUp, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Package, Search, User, Dog, Scissors, Clock,
+  RefreshCw, ChevronLeft, ChevronRight, Filter
+} from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
-interface ConsumoLog {
-  id: number;
+// ============================================
+// TIPOS UNIFICADOS (AHORA INCLUYE ASIGNADOS + CONSUMOS)
+// ============================================
+interface LogEntry {
+  id: string;
+  tipo: string;           // 'asignado' | 'consumo'
+  fecha: string;
+  producto: string;
+  sku: string;
+  variante: string | null;
   cantidad: number;
-  merma: boolean;
-  devuelto: boolean;
-  createdAt: string;
-  producto: { id: number; nombre: string; sku: string };
-  variante: { id: number; atributo: string; valor: string } | null;
-  fichaGrooming: {
-    id: number;
-    fechaCierre: string | null;
-    cita: {
-      id: number;
-      fechaHoraInicio: string;
-      mascota: { nombre: string };
-      servicio: { nombre: string };
-      groomer: {
-        id: number;
-        usuario: { id: number; nombre: string; apellido: string };
-      };
-    };
-  };
+  cantidadUsada: number | null;
+  estado: string;         // 'pendiente' | 'confirmado' | 'usado' | 'devuelto' | 'merma'
+  origen: string;         // Texto descriptivo
+  groomer: string;
+  groomerApellido: string;
+  mascota: string;
+  servicio: string;
+  fechaCita: string | null;
+  asignadoPor: string;
+  confirmadoPor: string;
+  citaId: number | null;
 }
 
 interface ResumenGroomer {
@@ -51,8 +53,11 @@ interface ResumenGroomer {
   productos: Record<string, number>;
 }
 
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 export default function LogInsumosPage() {
-  const [consumos, setConsumos] = useState<ConsumoLog[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [resumenGroomers, setResumenGroomers] = useState<ResumenGroomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -63,20 +68,28 @@ export default function LogInsumosPage() {
   const [groomers, setGroomers] = useState<any[]>([]);
   const [viewMode, setViewMode] = useState<"log" | "resumen">("log");
 
+  // Resumen general
+  const [resumen, setResumen] = useState<any>(null);
+
+  // ============================================
+  // CARGA DE DATOS
+  // ============================================
   const loadData = async () => {
     setLoading(true);
     try {
       if (viewMode === "log") {
-        const { data } = await api.get("/inventory/log-insumos", {
+        const { data } = await api.get("/inventory/log-completo", {
           params: {
             page,
             limit: 15,
             groomerId: groomerFilter || undefined,
+            search: search || undefined,
           },
         });
-        setConsumos(data.data.consumos || []);
+        setLogs(data.data.insumos || []);
         setTotal(data.data.total);
         setTotalPages(data.data.totalPages);
+        setResumen(data.data.resumen);
       } else {
         const { data } = await api.get("/inventory/log-insumos/resumen");
         setResumenGroomers(data.data || []);
@@ -94,11 +107,27 @@ export default function LogInsumosPage() {
 
   useEffect(() => { loadData(); loadGroomers(); }, [page, groomerFilter, viewMode]);
 
+  // ============================================
+  // HELPERS
+  // ============================================
+  const getEstadoBadge = (estado: string) => {
+    switch (estado) {
+      case 'usado': return <Badge variant="default" className="text-[10px]">Usado</Badge>;
+      case 'devuelto': return <Badge variant="secondary" className="text-[10px]">Devuelto</Badge>;
+      case 'merma': return <Badge variant="destructive" className="text-[10px]">Merma</Badge>;
+      case 'pendiente': return <Badge className="bg-accent text-[10px]">Pendiente</Badge>;
+      case 'confirmado': return <Badge className="bg-lavender text-[10px]">Confirmado</Badge>;
+      default: return <Badge variant="outline" className="text-[10px]">{estado}</Badge>;
+    }
+  };
+
   if (loading) return <LoadingSpinner text="Cargando log de insumos..." />;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* ============================================ */}
+      {/* HEADER                                         */}
+      {/* ============================================ */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
           <div className="rounded-xl border-3 border-foreground bg-info p-2">
@@ -107,7 +136,7 @@ export default function LogInsumosPage() {
           <div>
             <h1 className="text-3xl font-extrabold">Log de Insumos</h1>
             <p className="text-sm font-semibold text-foreground/70">
-              {total} registros de consumo
+              {total} registros totales
             </p>
           </div>
         </div>
@@ -119,19 +148,35 @@ export default function LogInsumosPage() {
             size="sm"
             onClick={() => setViewMode("log")}
           >
-            📋 Detalle
+            <Filter className="mr-1 h-4 w-4" /> Detalle
           </Button>
           <Button
             variant={viewMode === "resumen" ? "default" : "outline"}
             size="sm"
             onClick={() => setViewMode("resumen")}
           >
-            📊 Por Groomer
+            <User className="mr-1 h-4 w-4" /> Por Groomer
           </Button>
         </div>
       </div>
 
-      {/* Filtros */}
+      {/* ============================================ */}
+      {/* RESUMEN RÁPIDO (solo vista detalle)           */}
+      {/* ============================================ */}
+      {viewMode === "log" && resumen && (
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+          <Card><CardContent className="pt-3 pb-2 text-center"><p className="text-xl font-extrabold">{resumen.total}</p><p className="text-[10px]">Total</p></CardContent></Card>
+          <Card><CardContent className="pt-3 pb-2 text-center"><p className="text-xl font-extrabold text-primary">{resumen.usados}</p><p className="text-[10px]">Usados</p></CardContent></Card>
+          <Card><CardContent className="pt-3 pb-2 text-center"><p className="text-xl font-extrabold text-secondary">{resumen.devueltos}</p><p className="text-[10px]">Devueltos</p></CardContent></Card>
+          <Card><CardContent className="pt-3 pb-2 text-center"><p className="text-xl font-extrabold text-rose">{resumen.mermas}</p><p className="text-[10px]">Mermas</p></CardContent></Card>
+          <Card><CardContent className="pt-3 pb-2 text-center"><p className="text-xl font-extrabold text-accent">{resumen.pendientes}</p><p className="text-[10px]">Pendientes</p></CardContent></Card>
+          <Card><CardContent className="pt-3 pb-2 text-center"><p className="text-xl font-extrabold text-lavender">{resumen.confirmados}</p><p className="text-[10px]">Confirmados</p></CardContent></Card>
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* FILTROS                                       */}
+      {/* ============================================ */}
       <Card>
         <CardContent className="pt-4">
           <div className="flex flex-wrap gap-3">
@@ -155,10 +200,12 @@ export default function LogInsumosPage() {
         </CardContent>
       </Card>
 
-      {/* VISTA DETALLE */}
+      {/* ============================================ */}
+      {/* VISTA DETALLE (TABLA)                         */}
+      {/* ============================================ */}
       {viewMode === "log" && (
         <>
-          {consumos.length === 0 ? (
+          {logs.length === 0 ? (
             <EmptyState icon={<Package className="h-12 w-12" />} title="Sin registros" description="No hay consumo de insumos registrado" />
           ) : (
             <Card>
@@ -167,60 +214,97 @@ export default function LogInsumosPage() {
                   <thead>
                     <tr className="border-b-3 border-foreground text-left">
                       <th className="pb-3 font-extrabold px-2">Fecha</th>
+                      <th className="pb-3 font-extrabold px-2">Origen</th>
                       <th className="pb-3 font-extrabold px-2">Groomer</th>
                       <th className="pb-3 font-extrabold px-2">Mascota</th>
                       <th className="pb-3 font-extrabold px-2">Servicio</th>
                       <th className="pb-3 font-extrabold px-2">Producto</th>
                       <th className="pb-3 font-extrabold px-2 text-center">Cant.</th>
                       <th className="pb-3 font-extrabold px-2 text-center">Estado</th>
-                      <th className="pb-3 font-extrabold px-2 text-center">¿Descontado?</th>
+                      <th className="pb-3 font-extrabold px-2">Destino</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {consumos.map((c) => (
+                    {logs.map((log) => (
                       <tr
-                        key={c.id}
+                        key={log.id}
                         className={`border-b-2 border-foreground/20 ${
-                          c.devuelto ? "bg-secondary/30" : c.merma ? "bg-rose/5" : ""
+                          log.estado === 'devuelto' ? "bg-secondary/30" : 
+                          log.estado === 'merma' ? "bg-rose/5" : ""
                         }`}
                       >
+                        {/* Fecha */}
                         <td className="py-2 px-2 text-xs whitespace-nowrap">
-                          {format(new Date(c.createdAt), "dd/MM/yy HH:mm")}
+                          {format(new Date(log.fecha), "dd/MM/yy HH:mm")}
                         </td>
+
+                        {/* Origen (Admin/Groomer) */}
+                        <td className="py-2 px-2">
+                          <Badge variant={log.tipo === 'asignado' ? 'default' : 'secondary'} className="text-[10px]">
+                            {log.tipo === 'asignado' ? 'Admin' : 'Groomer'}
+                          </Badge>
+                        </td>
+
+                        {/* Groomer */}
                         <td className="py-2 px-2">
                           <div className="flex items-center gap-1">
                             <User className="h-3 w-3" />
                             <span className="font-bold text-xs">
-                              {c.fichaGrooming?.cita?.groomer?.usuario?.nombre || "N/A"}
+                              {log.groomer} {log.groomerApellido}
                             </span>
                           </div>
+                          {log.asignadoPor && (
+                            <p className="text-[9px] text-foreground/40">Asignado: {log.asignadoPor}</p>
+                          )}
+                          {log.confirmadoPor && (
+                            <p className="text-[9px] text-foreground/40">Confirmado: {log.confirmadoPor}</p>
+                          )}
                         </td>
-                        <td className="py-2 px-2 text-xs">{c.fichaGrooming?.cita?.mascota?.nombre || "N/A"}</td>
-                        <td className="py-2 px-2 text-xs">{c.fichaGrooming?.cita?.servicio?.nombre || "N/A"}</td>
+
+                        {/* Mascota */}
                         <td className="py-2 px-2">
-                          <p className="font-bold text-xs">{c.producto.nombre}</p>
-                          {c.variante && (
-                            <p className="text-[10px] text-foreground/50">{c.variante.valor}</p>
+                          <div className="flex items-center gap-1">
+                            <Dog className="h-3 w-3" />
+                            <span className="text-xs">{log.mascota || "—"}</span>
+                          </div>
+                        </td>
+
+                        {/* Servicio */}
+                        <td className="py-2 px-2">
+                          <div className="flex items-center gap-1">
+                            <Scissors className="h-3 w-3" />
+                            <span className="text-xs">{log.servicio || "—"}</span>
+                          </div>
+                        </td>
+
+                        {/* Producto */}
+                        <td className="py-2 px-2">
+                          <p className="font-bold text-xs">{log.producto}</p>
+                          <p className="text-[10px] font-mono text-foreground/50">{log.sku}</p>
+                          {log.variante && (
+                            <Badge variant="outline" className="text-[9px]">{log.variante}</Badge>
                           )}
                         </td>
+
+                        {/* Cantidad */}
                         <td className="py-2 px-2 text-center font-mono font-bold text-xs">
-                          {Number(c.cantidad)}
+                          {log.cantidad}
                         </td>
+
+                        {/* Estado */}
                         <td className="py-2 px-2 text-center">
-                          {c.devuelto ? (
-                            <Badge variant="secondary" className="text-[10px]">Devuelto</Badge>
-                          ) : c.merma ? (
-                            <Badge variant="destructive" className="text-[10px]">Merma</Badge>
-                          ) : (
-                            <Badge variant="default" className="text-[10px]">Usado</Badge>
-                          )}
+                          {getEstadoBadge(log.estado)}
                         </td>
-                        <td className="py-2 px-2 text-center">
-                          {c.devuelto ? (
-                            <Badge variant="outline" className="text-[10px]">❌ No</Badge>
-                          ) : (
-                            <Badge className="bg-primary text-[10px]">✅ Sí</Badge>
-                          )}
+
+                        {/* Destino / Origen del descuento */}
+                        <td className="py-2 px-2">
+                          <span className={`text-[10px] font-semibold ${
+                            log.estado === 'devuelto' ? 'text-secondary' :
+                            log.estado === 'merma' ? 'text-rose' :
+                            log.estado === 'usado' ? 'text-primary' : 'text-foreground/50'
+                          }`}>
+                            {log.origen}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -245,7 +329,9 @@ export default function LogInsumosPage() {
         </>
       )}
 
-      {/* VISTA RESUMEN POR GROOMER */}
+      {/* ============================================ */}
+      {/* VISTA RESUMEN POR GROOMER                     */}
+      {/* ============================================ */}
       {viewMode === "resumen" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {resumenGroomers.length === 0 ? (

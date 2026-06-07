@@ -191,6 +191,26 @@ export class GroomingService {
       },
     });
 
+    // Sumar puntos de fidelidad al cliente (10 puntos por servicio)
+    try {
+      const cita = await prisma.cita.findUnique({
+        where: { id: ficha.citaId },
+        include: { mascota: { select: { clienteId: true } } },
+      });
+      
+      if (cita?.mascota?.clienteId) {
+        await prisma.cliente.update({
+          where: { id: cita.mascota.clienteId },
+          data: {
+            puntosFidelidad: { increment: 10 },
+            totalServicios: { increment: 1 },
+          },
+        });
+      }
+    } catch (error) {
+      logger.error('Error sumando puntos de fidelidad:', error);
+    }
+
     // Actualizar estado de la cita
     await prisma.cita.update({
       where: { id: ficha.citaId },
@@ -293,5 +313,43 @@ export class GroomingService {
 
   static async deleteConsumoInsumo(id: number) {
     return prisma.consumoInsumo.delete({ where: { id } });
+  }
+
+  // Obtener TODAS las fichas del groomer (activas, cerradas, pendientes, cualquier fecha)
+  static async getTodasLasFichasGroomer(groomerId: number) {
+    return prisma.fichaGrooming.findMany({
+      where: {
+        cita: {
+          groomerId,
+        },
+      },
+      include: {
+        cita: {
+          include: {
+            mascota: { 
+              select: { 
+                id: true,
+                nombre: true, 
+                raza: true, 
+                tamanio: true, 
+                alergiasConocidas: true,
+                imagen: true,
+              } 
+            },
+            servicio: { select: { id: true, nombre: true } },
+          },
+        },
+        checklist: { 
+          include: { 
+            plantillaChecklist: { select: { id: true, item: true } } 
+          } 
+        },
+        fotos: { select: { id: true, tipo: true } },
+      },
+      orderBy: [
+        { fechaCierre: { sort: 'asc', nulls: 'first' } }, // Las no cerradas primero
+        { createdAt: 'desc' },
+      ],
+    });
   }
 }

@@ -7,7 +7,6 @@ export class InventoryService {
   // ============================================
   // PRODUCTOS
   // ============================================
-
   // Obtener todos los productos
   static async getProductos(params?: { categoriaId?: number; search?: string; bajoStock?: boolean }) {
     const where: any = {};
@@ -80,23 +79,44 @@ export class InventoryService {
         descripcion: data.descripcion,
         categoriaId: data.categoriaId,
         precioBase: data.precioBase,
+        precioPromocional: data.precioPromocional || null,
+        enPromocion: data.enPromocion || false,
         stockMinimo: data.stockMinimo || 5,
-        imagenUrl: data.imagenUrl || null,  
+        imagenUrl: data.imagenUrl || null,
+        esInsumo: data.esInsumo || false,
+        esTienda: data.esTienda !== false,
+        unidadMedida: data.unidadMedida || 'unidad',
       },
     });
 
-    // Crear variante por defecto con el stock INICIAL real (no el mínimo)
-    const stockInicial = data.stockInicial ?? data.stockMinimo ?? 5;
-    await prisma.varianteProducto.create({
-      data: {
-        productoId: producto.id,
-        atributo: 'Unico',
-        valor: 'Estandar',
-        skuVariante: `${data.sku}-STD`,
-        precioExtra: 0,
-        stockAdicional: stockInicial,
-      },
-    });
+    // 👇 CREAR VARIANTES (si se enviaron)
+    if (data.variantes && data.variantes.length > 0) {
+      for (const v of data.variantes) {
+        await prisma.varianteProducto.create({
+          data: {
+            productoId: producto.id,
+            atributo: v.atributo,
+            valor: v.valor,
+            skuVariante: v.skuVariante || `${data.sku}-${v.valor.toUpperCase().replace(/\s/g, '-')}`,
+            precioExtra: v.precioExtra || 0,
+            stockAdicional: v.stockAdicional || data.stockInicial || 10,
+          },
+        });
+      }
+    } else {
+      // Crear variante por defecto
+      const stockInicial = data.stockInicial ?? data.stockMinimo ?? 5;
+      await prisma.varianteProducto.create({
+        data: {
+          productoId: producto.id,
+          atributo: 'Único',
+          valor: 'Estándar',
+          skuVariante: `${data.sku}-STD`,
+          precioExtra: 0,
+          stockAdicional: stockInicial,
+        },
+      });
+    }
 
     return producto;
   }
@@ -119,10 +139,20 @@ export class InventoryService {
   }
 
   // Actualizar stock de variante
-  static async updateStockVariante(id: number, cantidad: number) {
+  static async updateStockVariante(id: number, cantidad: number, tipo: string = 'entrada') {
+    const variante = await prisma.varianteProducto.findUnique({ where: { id } });
+    if (!variante) throw new AppError(ErrorCodes.USER_NOT_FOUND, 404, 'Variante no encontrada');
+
+    let nuevoStock: number;
+    if (tipo === 'entrada' || tipo === 'devolucion' || tipo === 'Reabastecimiento') {
+      nuevoStock = variante.stockAdicional + Math.abs(cantidad);
+    } else {
+      nuevoStock = Math.max(0, variante.stockAdicional - Math.abs(cantidad));
+    }
+
     return prisma.varianteProducto.update({
       where: { id },
-      data: { stockAdicional: { decrement: Math.abs(cantidad) } },
+      data: { stockAdicional: nuevoStock },
     });
   }
 
@@ -466,7 +496,7 @@ static async getInsumosSugeridos(servicioId: number) {
     }
   }
 
-  // PASO 5: Log completo para admin
+// PASO 5: Log completo para admin (AHORA INCLUYE AMBAS TABLAS)
   static async getLogCompleto(params?: {
     citaId?: number;
     groomerId?: number;
@@ -475,62 +505,164 @@ static async getInsumosSugeridos(servicioId: number) {
     page?: number;
     limit?: number;
   }) {
-    const where: any = {};
-    if (params?.citaId) where.citaId = params.citaId;
-    if (params?.groomerId) {
-      where.cita = { groomerId: params.groomerId };
-    }
-    if (params?.desde || params?.hasta) {
-      where.fechaAsignacion = {};
-      if (params?.desde) where.fechaAsignacion.gte = new Date(params.desde);
-      if (params?.hasta) where.fechaAsignacion.lte = new Date(params.hasta);
-    }
-
     const page = params?.page || 1;
     const limit = params?.limit || 20;
     const skip = (page - 1) * limit;
 
-    const [insumos, total] = await Promise.all([
-      prisma.insumoAsignado.findMany({
-        where,
-        include: {
-          producto: { select: { id: true, nombre: true, sku: true } },
-          variante: { select: { id: true, valor: true } },
-          asignador: { select: { id: true, nombre: true, apellido: true } },
-          confirmador: { select: { id: true, nombre: true, apellido: true } },
-          cita: {
-            select: {
-              id: true,
-              fechaHoraInicio: true,
-              mascota: { select: { nombre: true } },
-              servicio: { select: { nombre: true } },
-              groomer: { select: { usuario: { select: { nombre: true, apellido: true } } } },
+    // ============================================
+    // 1. Obtener logs de insumos_asignados
+    // ============================================
+    const whereAsignados: any = {};
+    if (params?.citaId) whereAsignados.citaId = params.citaId;
+    if (params?.groomerId) {
+      whereAsignados.cita = { groomerId: params.groomerId };
+    }
+    if (params?.desde || params?.hasta) {
+      whereAsignados.fechaAsignacion = {};
+      if (params?.desde) whereAsignados.fechaAsignacion.gte = new Date(params.desde);
+      if (params?.hasta) whereAsignados.fechaAsignacion.lte = new Date(params.hasta);
+    }
+
+    const insumosAsignados = await prisma.insumoAsignado.findMany({
+      where: whereAsignados,
+      include: {
+        producto: { select: { id: true, nombre: true, sku: true } },
+        variante: { select: { id: true, valor: true } },
+        asignador: { select: { id: true, nombre: true, apellido: true } },
+        confirmador: { select: { id: true, nombre: true, apellido: true } },
+        cita: {
+          select: {
+            id: true,
+            fechaHoraInicio: true,
+            mascota: { select: { nombre: true } },
+            servicio: { select: { nombre: true } },
+            groomer: { select: { usuario: { select: { nombre: true, apellido: true } } } },
+          },
+        },
+      },
+      orderBy: { fechaAsignacion: 'desc' },
+    });
+
+    // ============================================
+    // 2. Obtener logs de consumo_insumos (groomer)
+    // ============================================
+    const whereConsumo: any = {};
+    if (params?.groomerId) {
+      whereConsumo.fichaGrooming = { cita: { groomerId: params.groomerId } };
+    }
+    if (params?.citaId) {
+      whereConsumo.fichaGrooming = { citaId: params.citaId };
+    }
+    if (params?.desde || params?.hasta) {
+      whereConsumo.createdAt = {};
+      if (params?.desde) whereConsumo.createdAt.gte = new Date(params.desde);
+      if (params?.hasta) whereConsumo.createdAt.lte = new Date(params.hasta);
+    }
+
+    const consumosInsumos = await prisma.consumoInsumo.findMany({
+      where: whereConsumo,
+      include: {
+        producto: { select: { id: true, nombre: true, sku: true } },
+        variante: { select: { id: true, valor: true } },
+        fichaGrooming: {
+          select: {
+            id: true,
+            fechaCierre: true,
+            cita: {
+              select: {
+                id: true,
+                fechaHoraInicio: true,
+                mascota: { select: { nombre: true } },
+                servicio: { select: { nombre: true } },
+                groomer: { select: { usuario: { select: { nombre: true, apellido: true } } } },
+              },
             },
           },
         },
-        orderBy: { fechaAsignacion: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.insumoAsignado.count({ where }),
-    ]);
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    // Resumen para dashboard
-    const todos = await prisma.insumoAsignado.findMany({ where });
+    // ============================================
+    // 3. Unificar y formatear
+    // ============================================
+    
+    // Formatear insumos asignados
+    const logsAsignados = insumosAsignados.map(item => ({
+      id: `asig-${item.id}`,
+      tipo: 'asignado',
+      fecha: item.fechaAsignacion,
+      producto: item.producto?.nombre || 'Desconocido',
+      sku: item.producto?.sku || '',
+      variante: item.variante?.valor || null,
+      cantidad: Number(item.cantidadAsignada),
+      cantidadUsada: item.cantidadUsada ? Number(item.cantidadUsada) : null,
+      estado: item.estado,
+      origen: item.estado === 'usado' ? 'Descontado' : 
+              item.estado === 'devuelto' ? 'Devuelto' :
+              item.estado === 'merma' ? 'Merma (Desperdicio)' :
+              item.estado === 'confirmado' ? 'Confirmado' : 'Pendiente',
+      groomer: item.cita?.groomer?.usuario?.nombre || 'No asignado',
+      groomerApellido: item.cita?.groomer?.usuario?.apellido || '',
+      mascota: item.cita?.mascota?.nombre || '',
+      servicio: item.cita?.servicio?.nombre || '',
+      fechaCita: item.cita?.fechaHoraInicio || null,
+      asignadoPor: item.asignador?.nombre || '',
+      confirmadoPor: item.confirmador?.nombre || '',
+      citaId: item.citaId,
+    }));
+
+    // Formatear consumos del groomer
+    const logsConsumo = consumosInsumos.map(item => ({
+      id: `cons-${item.id}`,
+      tipo: 'consumo',
+      fecha: item.createdAt,
+      producto: item.producto?.nombre || 'Desconocido',
+      sku: item.producto?.sku || '',
+      variante: item.variante?.valor || null,
+      cantidad: Number(item.cantidad),
+      cantidadUsada: Number(item.cantidad),
+      estado: item.devuelto ? 'devuelto' : item.merma ? 'merma' : 'usado',
+      origen: item.devuelto ? 'Devuelto (no descuenta)' : 
+              item.merma ? 'Merma (Desperdicio)' : 'Usado (Descontado)',
+      groomer: item.fichaGrooming?.cita?.groomer?.usuario?.nombre || '',
+      groomerApellido: item.fichaGrooming?.cita?.groomer?.usuario?.apellido || '',
+      mascota: item.fichaGrooming?.cita?.mascota?.nombre || '',
+      servicio: item.fichaGrooming?.cita?.servicio?.nombre || '',
+      fechaCita: item.fichaGrooming?.cita?.fechaHoraInicio || null,
+      asignadoPor: '',
+      confirmadoPor: '',
+      citaId: item.fichaGrooming?.cita?.id || null,
+    }));
+
+    // Unir y ordenar por fecha (más reciente primero)
+    const todosLogs = [...logsAsignados, ...logsConsumo]
+      .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+    // Paginar
+    const total = todosLogs.length;
+    const paginados = todosLogs.slice(skip, skip + limit);
+
+    // Resumen
     const resumen = {
       total,
-      pendientes: todos.filter(i => i.estado === 'pendiente').length,
-      confirmados: todos.filter(i => i.estado === 'confirmado').length,
-      usados: todos.filter(i => i.estado === 'usado').length,
-      devueltos: todos.filter(i => i.estado === 'devuelto').length,
-      mermas: todos.filter(i => i.estado === 'merma').length,
-      cantidadTotalAsignada: todos.reduce((sum, i) => sum + Number(i.cantidadAsignada), 0),
-      cantidadTotalUsada: todos.filter(i => i.estado === 'usado').reduce((sum, i) => sum + Number(i.cantidadUsada || i.cantidadAsignada), 0),
-      cantidadTotalDevuelta: todos.filter(i => i.estado === 'devuelto').reduce((sum, i) => sum + Number(i.cantidadAsignada), 0),
-      cantidadTotalMerma: todos.filter(i => i.estado === 'merma').reduce((sum, i) => sum + Number(i.cantidadUsada || i.cantidadAsignada), 0),
+      asignados: logsAsignados.length,
+      consumos: logsConsumo.length,
+      usados: todosLogs.filter(l => l.estado === 'usado').length,
+      devueltos: todosLogs.filter(l => l.estado === 'devuelto').length,
+      mermas: todosLogs.filter(l => l.estado === 'merma').length,
+      pendientes: todosLogs.filter(l => l.estado === 'pendiente').length,
+      confirmados: todosLogs.filter(l => l.estado === 'confirmado').length,
     };
 
-    return { insumos, resumen, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      insumos: paginados,
+      resumen,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   // ============================================
@@ -580,20 +712,21 @@ static async getInsumosSugeridos(servicioId: number) {
       ];
     }
 
-    console.log('🔍 Buscando insumos técnicos con where:', JSON.stringify(where));
-
-    const productos = await prisma.producto.findMany({
+    return prisma.producto.findMany({
       where,
       include: {
-        variantes: { 
-          select: { id: true, atributo: true, valor: true, stockAdicional: true },
+        variantes: {
+          select: { 
+            id: true, 
+            atributo: true, 
+            valor: true, 
+            stockAdicional: true,
+            precioExtra: true,
+          },
         },
       },
       orderBy: { nombre: 'asc' },
     });
-
-    console.log('🔍 Insumos técnicos encontrados:', productos.length);
-    return productos;
   }
 
   // Obtener ambos (para admin)
@@ -605,7 +738,7 @@ static async getInsumosSugeridos(servicioId: number) {
   }) {
     const where: any = { activo: true };
     
-    if (params?.categoriaId) where.categoriaId = params.categoriaId;
+    if (params?.categoriaId) where.categoriaId = params.categoriaId;  // 👈 AGREGAR
     if (params?.tipo === 'insumo') where.esInsumo = true;
     if (params?.tipo === 'tienda') where.esTienda = true;
     if (params?.search) {
@@ -876,5 +1009,181 @@ static async configurarInsumosServicio(
         })(),
       }))
       .sort((a, b) => a.porcentaje - b.porcentaje);
+  }
+
+  // ============================================
+  // ALERTAS DE ALTO CONSUMO
+  // ============================================
+
+  static async getAlertasAltoConsumo(desde?: string, hasta?: string) {
+    const whereConsumo: any = {};
+    
+    if (desde || hasta) {
+      whereConsumo.createdAt = {};
+      if (desde) whereConsumo.createdAt.gte = new Date(desde);
+      if (hasta) whereConsumo.createdAt.lte = new Date(hasta);
+    }
+
+    // ============================================
+    // 1. Consumo por groomer
+    // ============================================
+    
+    // Obtener todos los consumos
+    const consumos = await prisma.consumoInsumo.findMany({
+      where: whereConsumo,
+      include: {
+        producto: { select: { nombre: true } },
+        fichaGrooming: {
+          select: {
+            cita: {
+              select: {
+                groomer: {
+                  select: {
+                    id: true,
+                    usuario: { select: { nombre: true, apellido: true } },
+                  },
+                },
+                servicio: { select: { nombre: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // También incluir insumos asignados
+    const whereAsignados: any = {};
+    if (desde || hasta) {
+      whereAsignados.fechaAsignacion = {};
+      if (desde) whereAsignados.fechaAsignacion.gte = new Date(desde);
+      if (hasta) whereAsignados.fechaAsignacion.lte = new Date(hasta);
+    }
+
+    const asignados = await prisma.insumoAsignado.findMany({
+      where: {
+        ...whereAsignados,
+        estado: { in: ['usado', 'merma'] },
+      },
+      include: {
+        producto: { select: { nombre: true } },
+        cita: {
+          select: {
+            groomer: {
+              select: {
+                id: true,
+                usuario: { select: { nombre: true, apellido: true } },
+              },
+            },
+            servicio: { select: { nombre: true } },
+          },
+        },
+      },
+    });
+
+    // ============================================
+    // Agrupar por groomer
+    // ============================================
+    const porGroomer: Record<number, any> = {};
+
+    for (const c of consumos) {
+      const groomer = c.fichaGrooming?.cita?.groomer;
+      if (!groomer) continue;
+
+      const key = groomer.id;
+      if (!porGroomer[key]) {
+        porGroomer[key] = {
+          groomerId: key,
+          nombre: groomer.usuario.nombre,
+          apellido: groomer.usuario.apellido,
+          totalConsumos: 0,
+          cantidadTotal: 0,
+          productos: {} as Record<string, number>,
+        };
+      }
+      porGroomer[key].totalConsumos++;
+      porGroomer[key].cantidadTotal += Number(c.cantidad);
+      
+      const prod = c.producto.nombre;
+      porGroomer[key].productos[prod] = (porGroomer[key].productos[prod] || 0) + Number(c.cantidad);
+    }
+
+    for (const a of asignados) {
+      const groomer = a.cita?.groomer;
+      if (!groomer) continue;
+
+      const key = groomer.id;
+      if (!porGroomer[key]) {
+        porGroomer[key] = {
+          groomerId: key,
+          nombre: groomer.usuario.nombre,
+          apellido: groomer.usuario.apellido,
+          totalConsumos: 0,
+          cantidadTotal: 0,
+          productos: {} as Record<string, number>,
+        };
+      }
+      porGroomer[key].totalConsumos++;
+      porGroomer[key].cantidadTotal += Number(a.cantidadUsada || a.cantidadAsignada);
+      
+      const prod = a.producto.nombre;
+      porGroomer[key].productos[prod] = (porGroomer[key].productos[prod] || 0) + Number(a.cantidadUsada || a.cantidadAsignada);
+    }
+
+    // Filtrar solo los que tienen consumo elevado (>10 consumos o >20 unidades)
+    const alertasGroomer = Object.values(porGroomer)
+      .filter((g: any) => g.totalConsumos >= 5 || g.cantidadTotal >= 10)
+      .sort((a: any, b: any) => b.cantidadTotal - a.cantidadTotal);
+
+    // ============================================
+    // Agrupar por servicio
+    // ============================================
+    const porServicio: Record<string, any> = {};
+
+    for (const c of consumos) {
+      const servicio = c.fichaGrooming?.cita?.servicio?.nombre;
+      if (!servicio) continue;
+
+      if (!porServicio[servicio]) {
+        porServicio[servicio] = {
+          servicio,
+          totalConsumos: 0,
+          cantidadTotal: 0,
+          productos: {} as Record<string, number>,
+        };
+      }
+      porServicio[servicio].totalConsumos++;
+      porServicio[servicio].cantidadTotal += Number(c.cantidad);
+      
+      const prod = c.producto.nombre;
+      porServicio[servicio].productos[prod] = (porServicio[servicio].productos[prod] || 0) + Number(c.cantidad);
+    }
+
+    for (const a of asignados) {
+      const servicio = a.cita?.servicio?.nombre;
+      if (!servicio) continue;
+
+      if (!porServicio[servicio]) {
+        porServicio[servicio] = {
+          servicio,
+          totalConsumos: 0,
+          cantidadTotal: 0,
+          productos: {} as Record<string, number>,
+        };
+      }
+      porServicio[servicio].totalConsumos++;
+      porServicio[servicio].cantidadTotal += Number(a.cantidadUsada || a.cantidadAsignada);
+      
+      const prod = a.producto.nombre;
+      porServicio[servicio].productos[prod] = (porServicio[servicio].productos[prod] || 0) + Number(a.cantidadUsada || a.cantidadAsignada);
+    }
+
+    const alertasServicio = Object.values(porServicio)
+      .filter((s: any) => s.totalConsumos >= 3)
+      .sort((a: any, b: any) => b.cantidadTotal - a.cantidadTotal);
+
+    return {
+      porGroomer: alertasGroomer,
+      porServicio: alertasServicio,
+    };
   }
 }

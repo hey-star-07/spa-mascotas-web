@@ -10,6 +10,15 @@ export interface CreateProductoDTO {
   esInsumo?: boolean;    
   esTienda?: boolean;    
   unidadMedida?: string;
+  precioPromocional?: number;
+  enPromocion?: boolean;
+  variantes?: Array<{
+    atributo: string;
+    valor: string;
+    skuVariante: string;
+    precioExtra?: number;
+    stockAdicional?: number;
+  }>;
 }
 
 export interface UpdateProductoDTO {
@@ -17,6 +26,8 @@ export interface UpdateProductoDTO {
   descripcion?: string;
   categoriaId?: number;
   precioBase?: number;
+  precioPromocional?: number;  
+  enPromocion?: boolean;
   stockMinimo?: number;
   imagenUrl?: string;
   activo?: boolean;

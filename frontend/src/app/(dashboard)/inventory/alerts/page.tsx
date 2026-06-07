@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertTriangle, ShoppingBag, Scissors, RefreshCw,
-  Search, TrendingDown, Package, PackagePlus
+  Search, TrendingDown, Package, PackagePlus,
+  TrendingUp, User
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -134,16 +136,32 @@ export default function InventoryAlertsPage() {
             <p className="text-sm text-foreground/60">{todas.length} alertas en total</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={loadData}>
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Actualizar
+        <div className="flex gap-8">
+        <Link href="/inventory/alerts/alto-consumo">
+          <Button 
+            size="default"
+            className="bg-rose text-foreground border-3 border-foreground shadow-cartoon-sm hover:shadow-cartoon-hover hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+          >
+            <TrendingUp className="mr-1.5 h-3.5 w-3.5" /> Alto Consumo
           </Button>
-          <Link href="/inventory">
-            <Button variant="outline" size="sm">
-              <Package className="mr-1.5 h-3.5 w-3.5" /> Inventario
-            </Button>
-          </Link>
-        </div>
+        </Link>
+        <Button 
+          variant="outline" 
+          size="default" 
+          onClick={loadData}
+          className="border-3 border-foreground shadow-cartoon-sm hover:shadow-cartoon-hover hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+        >
+          <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Actualizar
+        </Button>
+        <Link href="/inventory">
+          <Button 
+            size="default" 
+            className="bg-lavender text-foreground border-3 border-foreground shadow-cartoon-sm hover:shadow-cartoon-hover hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+          >
+            <Package className="mr-1.5 h-3.5 w-3.5" /> Inventario
+          </Button>
+        </Link>
+      </div>
       </div>
 
       {/* ============================================ */}
@@ -432,5 +450,145 @@ function AlertaRestockForm({ alerta, onSuccess }: { alerta: AlertaProducto; onSu
         <Button onClick={handleSubmit} disabled={loading} className="w-full">{loading ? "Abasteciendo..." : `Agregar ${cantidad} unidades`}</Button>
       </DialogFooter>
     </div>
+  );
+}
+
+// ============================================
+// SECCIÓN ALTO CONSUMO
+// ============================================
+function AltoConsumoSection() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"groomer" | "servicio">("groomer");
+
+  useEffect(() => {
+    api.get("/inventory/alertas/alto-consumo")
+      .then(({ data }) => setData(data.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <LoadingSpinner text="Cargando análisis de consumo..." />;
+  if (!data) return null;
+
+  const lista = viewMode === "groomer" ? data.porGroomer : data.porServicio;
+
+  if (!lista || lista.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" /> Alto Consumo
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-foreground/50 text-center py-4">
+            No se detectaron patrones de consumo elevado.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" /> Alto Consumo
+          </CardTitle>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              variant={viewMode === "groomer" ? "default" : "outline"}
+              onClick={() => setViewMode("groomer")}
+              className="text-xs"
+            >
+              Por Groomer
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === "servicio" ? "default" : "outline"}
+              onClick={() => setViewMode("servicio")}
+              className="text-xs"
+            >
+              Por Servicio
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {lista.map((item: any, idx: number) => (
+            <div
+              key={idx}
+              className={`p-4 border-2 border-foreground rounded-xl ${
+                item.cantidadTotal > 30 ? 'bg-rose/5 border-rose' :
+                item.cantidadTotal > 15 ? 'bg-accent/5 border-accent' : ''
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  {viewMode === "groomer" ? (
+                    <User className="h-5 w-5" />
+                  ) : (
+                    <Scissors className="h-5 w-5" />
+                  )}
+                  <h3 className="font-extrabold text-base">
+                    {viewMode === "groomer" 
+                      ? `${item.nombre} ${item.apellido}`
+                      : item.servicio
+                    }
+                  </h3>
+                </div>
+                <Badge variant={item.cantidadTotal > 30 ? "destructive" : "secondary"}>
+                  {item.cantidadTotal > 30 ? "Consumo elevado" : "Revisar"}
+                </Badge>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="bg-secondary/30 rounded-lg p-2 text-center">
+                  <p className="text-lg font-extrabold">{item.totalConsumos}</p>
+                  <p className="text-[9px]">Registros</p>
+                </div>
+                <div className="bg-primary/10 rounded-lg p-2 text-center">
+                  <p className="text-lg font-extrabold">{item.cantidadTotal}</p>
+                  <p className="text-[9px]">Total uds</p>
+                </div>
+                <div className="bg-accent/10 rounded-lg p-2 text-center">
+                  <p className="text-lg font-extrabold">
+                    {Object.keys(item.productos).length}
+                  </p>
+                  <p className="text-[9px]">Productos</p>
+                </div>
+              </div>
+
+              {/* Productos más consumidos */}
+              <div>
+                <p className="text-xs font-bold mb-1">Productos más usados:</p>
+                <div className="flex flex-wrap gap-1">
+                  {Object.entries(item.productos)
+                    .sort(([, a], [, b]) => (b as number) - (a as number))
+                    .slice(0, 5)
+                    .map(([nombre, cantidad]) => (
+                      <span
+                        key={nombre}
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                          (cantidad as number) > 10
+                            ? 'border-rose bg-rose/10 text-rose'
+                            : 'border-foreground/20 bg-secondary/40'
+                        }`}
+                      >
+                        {nombre}: {cantidad as number}u
+                      </span>
+                    ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

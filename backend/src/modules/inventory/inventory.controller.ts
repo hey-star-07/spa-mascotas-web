@@ -252,13 +252,16 @@ export class InventoryController {
 
   /**
    * GET /api/inventory/log-insumos/resumen
-   * Resumen agrupado por groomer
+   * Resumen agrupado por groomer (AHORA INCLUYE AMBAS TABLAS)
    */
   static async getResumenPorGroomer(req: Request, res: Response, next: NextFunction) {
     try {
       const { desde, hasta } = req.query as any;
+      
+      // ============================================
+      // 1. Obtener datos de consumo_insumos
+      // ============================================
       const whereConsumo: any = {};
-
       if (desde || hasta) {
         whereConsumo.createdAt = {};
         if (desde) whereConsumo.createdAt.gte = new Date(desde);
@@ -286,8 +289,39 @@ export class InventoryController {
         },
       });
 
-      // Agrupar por groomer
+      // ============================================
+      // 2. Obtener datos de insumo_asignados
+      // ============================================
+      const whereAsignados: any = {};
+      if (desde || hasta) {
+        whereAsignados.fechaAsignacion = {};
+        if (desde) whereAsignados.fechaAsignacion.gte = new Date(desde);
+        if (hasta) whereAsignados.fechaAsignacion.lte = new Date(hasta);
+      }
+
+      const asignados = await prisma.insumoAsignado.findMany({
+        where: whereAsignados,
+        include: {
+          producto: { select: { nombre: true } },
+          cita: {
+            select: {
+              groomer: {
+                select: {
+                  id: true,
+                  usuario: { select: { nombre: true, apellido: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // ============================================
+      // 3. Unificar y agrupar por groomer
+      // ============================================
       const porGroomer: Record<number, any> = {};
+
+      // Procesar consumos
       for (const c of consumos) {
         const groomer = c.fichaGrooming?.cita?.groomer;
         if (!groomer) continue;
@@ -324,9 +358,47 @@ export class InventoryController {
         porGroomer[key].productos[prodNombre] = (porGroomer[key].productos[prodNombre] || 0) + Number(c.cantidad);
       }
 
+      // Procesar asignados (solo los que tienen estado final)
+      for (const a of asignados) {
+        const groomer = a.cita?.groomer;
+        if (!groomer) continue;
+
+        const key = groomer.id;
+        if (!porGroomer[key]) {
+          porGroomer[key] = {
+            groomerId: key,
+            nombre: groomer.usuario.nombre,
+            apellido: groomer.usuario.apellido,
+            totalConsumos: 0,
+            usados: 0,
+            devueltos: 0,
+            mermas: 0,
+            cantidadUsada: 0,
+            cantidadDevuelta: 0,
+            productos: {} as Record<string, number>,
+          };
+        }
+
+        porGroomer[key].totalConsumos++;
+        
+        if (a.estado === 'usado') {
+          porGroomer[key].usados++;
+          porGroomer[key].cantidadUsada += Number(a.cantidadUsada || a.cantidadAsignada);
+        } else if (a.estado === 'devuelto') {
+          porGroomer[key].devueltos++;
+          porGroomer[key].cantidadDevuelta += Number(a.cantidadAsignada);
+        } else if (a.estado === 'merma') {
+          porGroomer[key].mermas++;
+          porGroomer[key].cantidadUsada += Number(a.cantidadUsada || a.cantidadAsignada);
+        }
+
+        const prodNombre = a.producto.nombre;
+        porGroomer[key].productos[prodNombre] = (porGroomer[key].productos[prodNombre] || 0) + Number(a.cantidadUsada || a.cantidadAsignada);
+      }
+
       res.status(200).json({
         status: 'success',
-        data: Object.values(porGroomer),
+        data: Object.values(porGroomer).sort((a: any, b: any) => b.totalConsumos - a.totalConsumos),
       });
     } catch (error) {
       next(error);
@@ -575,6 +647,21 @@ export class InventoryController {
     try {
       const data = await InventoryService.getAlertasInsumos();
       res.status(200).json({ status: 'success', data, total: data.length });
+    } catch (error) { next(error); }
+  }
+
+    /**
+   * GET /api/inventory/alertas/alto-consumo
+   * Alertas de consumo elevado por groomer y por servicio
+   */
+  static async getAlertasAltoConsumo(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { desde, hasta } = req.query;
+      const data = await InventoryService.getAlertasAltoConsumo(
+        desde as string, 
+        hasta as string
+      );
+      res.status(200).json({ status: 'success', data });
     } catch (error) { next(error); }
   }
 }

@@ -26,6 +26,8 @@ interface Producto {
   nombre: string;
   descripcion?: string;
   precioBase: number;
+  precioPromocional?: number | null;  
+  enPromocion?: boolean; 
   stockMinimo: number;
   imagenUrl: string | null;
   activo?: boolean;
@@ -33,7 +35,13 @@ interface Producto {
   esTienda?: boolean;
   unidadMedida?: string;
   categoria: { id: number; nombre: string } | null;
-  variantes: Array<{ id: number; atributo: string; valor: string; stockAdicional: number }>;
+  variantes: Array<{ 
+    id: number; 
+    atributo: string; 
+    valor: string; 
+    stockAdicional: number;
+    precioExtra?: number;  // 👈 Agregado (para variantes con precio extra)
+  }>;
 }
 
 interface Alerta { id: number; nombre: string; sku: string; stockActual: number; stockMinimo: number; }
@@ -51,6 +59,9 @@ export default function InventoryPage() {
   const [selectedProducto, setSelectedProducto] = useState<Producto | null>(null);
   const [alertasTiendaCount, setAlertasTiendaCount] = useState(0);
   const [alertasInsumosCount, setAlertasInsumosCount] = useState(0);
+  const [categorias, setCategorias] = useState<any[]>([]);
+  const [categoriaFilter, setCategoriaFilter] = useState("");
+  const [tipoFilter, setTipoFilter] = useState("todos");
 
   useEffect(() => {
     Promise.all([api.get("/inventory/alertas/tienda"), api.get("/inventory/alertas/insumos")])
@@ -58,11 +69,25 @@ export default function InventoryPage() {
       .catch(() => {});
   }, []);
 
+  // Cargar categorías al montar
+  useEffect(() => {
+    api.get("/inventory/categorias")
+      .then(({ data }) => setCategorias(data.data || []))
+      .catch(() => {});
+  }, []);
+
   const loadData = async () => {
     setLoading(true);
     try {
       const [prodRes, alertRes] = await Promise.all([
-        api.get("/inventory/productos", { params: { search: search || undefined, bajoStock: showBajoStock } }),
+        api.get("/inventory/productos", { 
+          params: { 
+            search: search || undefined, 
+            bajoStock: showBajoStock,
+            categoriaId: categoriaFilter || undefined,
+            tipo: tipoFilter !== "todos" ? tipoFilter : undefined,
+          } 
+        }),
         api.get("/inventory/alertas"),
       ]);
       setProductos(prodRes.data.data || []);
@@ -71,7 +96,7 @@ export default function InventoryPage() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { loadData(); }, [search, showBajoStock]);
+  useEffect(() => { loadData(); }, [search, showBajoStock, categoriaFilter]);
 
   const getStockTotal = (p: Producto) => p.variantes.reduce((s, v) => s + v.stockAdicional, 0);
 
@@ -139,14 +164,57 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* Barra búsqueda + filtro */}
-      <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
+      {/* Barra de filtros */}
+      <div className="flex gap-3 flex-wrap items-end">
+        {/* Buscador */}
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-foreground/50" />
-          <Input placeholder="Buscar producto..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+          <Input placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10 h-12 text-sm" />
         </div>
-        <Button variant={showBajoStock ? "default" : "outline"} onClick={() => setShowBajoStock(!showBajoStock)}>
-          <AlertTriangle className="mr-2 h-4 w-4" /> Bajo Stock
+
+        {/* Categoría (select nativo) */}
+        <select
+          value={categoriaFilter}
+          onChange={e => setCategoriaFilter(e.target.value)}
+          className="h-12 rounded-xl border-3 border-foreground bg-white px-4 font-bold text-sm min-w-[160px]"
+        >
+          <option value="">Todas las categorías</option>
+          {categorias.map((c: any) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+        </select>
+
+        {/* Tipo (botones con iconos) */}
+        <div className="flex gap-1">
+          {[
+            { value: "todos", label: "Todos", icon: <Package className="h-4 w-4" /> },
+            { value: "tienda", label: "Tienda", icon: <ShoppingBag className="h-4 w-4" /> },
+            { value: "insumo", label: "Insumos", icon: <Scissors className="h-4 w-4" /> },
+          ].map(btn => (
+            <button
+              key={btn.value}
+              onClick={() => setTipoFilter(btn.value)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl border-3 border-foreground text-sm font-bold transition-all ${
+                tipoFilter === btn.value
+                  ? "bg-foreground text-background shadow-cartoon-sm"
+                  : "bg-white hover:bg-primary/20"
+              }`}
+            >
+              {btn.icon}
+              <span className="hidden sm:inline">{btn.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Bajo Stock */}
+        <Button
+          variant={showBajoStock ? "default" : "outline"}
+          onClick={() => setShowBajoStock(!showBajoStock)}
+          size="sm"
+          className="h-12"
+        >
+          <AlertTriangle className="mr-2 h-4 w-4" />
+          Bajo Stock
         </Button>
       </div>
 
@@ -262,29 +330,71 @@ export default function InventoryPage() {
 // FORMULARIO NUEVO PRODUCTO
 // ══════════════════════════════════════
 function NuevoProductoForm({ onSuccess }: { onSuccess: () => void }) {
-  const [form, setForm] = useState({ sku: "", nombre: "", descripcion: "", precioBase: 0, stockInicial: 10, stockMinimo: 5, imagenUrl: "", esInsumo: false, esTienda: true, unidadMedida: "unidad", categoriaId: "" });
+  const [form, setForm] = useState({
+    sku: "", nombre: "", descripcion: "", precioBase: 0, precioPromocional: 0,
+    enPromocion: false, stockInicial: 10, stockMinimo: 5, imagenUrl: "",
+    esInsumo: false, esTienda: true, unidadMedida: "unidad", categoriaId: "",
+  });
+  
+  // 👇 VARIANTES
+  const [variantes, setVariantes] = useState<Array<{
+    atributo: string; valor: string; precioExtra: number; stockAdicional: number;
+  }>>([]);
+  const [nuevaVariante, setNuevaVariante] = useState({ atributo: "", valor: "", precioExtra: 0, stockAdicional: 10 });
+  
   const [loading, setLoading] = useState(false);
   const [categorias, setCategorias] = useState<any[]>([]);
-  useEffect(() => { api.get("/inventory/categorias").then(({ data }) => setCategorias(data.data || [])).catch(() => {}); }, []);
+  const [showVariantes, setShowVariantes] = useState(false);
+
+  useEffect(() => {
+    api.get("/inventory/categorias").then(({ data }) => setCategorias(data.data || [])).catch(() => {});
+  }, []);
+
+  const addVariante = () => {
+    if (!nuevaVariante.atributo || !nuevaVariante.valor) {
+      return toast.error("Ingresa atributo y valor de la variante");
+    }
+    setVariantes([...variantes, { ...nuevaVariante }]);
+    setNuevaVariante({ atributo: "", valor: "", precioExtra: 0, stockAdicional: 10 });
+  };
+
+  const removeVariante = (index: number) => {
+    setVariantes(variantes.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = async () => {
     if (!form.sku.trim()) return toast.error("SKU obligatorio");
     if (!form.nombre.trim()) return toast.error("Nombre obligatorio");
     if (form.precioBase <= 0) return toast.error("Precio debe ser mayor a 0");
+    
     setLoading(true);
     try {
-      await api.post("/inventory/productos", { ...form, categoriaId: form.categoriaId ? parseInt(form.categoriaId) : undefined });
-      toast.success("Producto creado"); onSuccess();
+      await api.post("/inventory/productos", {
+        ...form,
+        categoriaId: form.categoriaId ? parseInt(form.categoriaId) : undefined,
+        variantes: variantes.length > 0 ? variantes.map(v => ({
+          atributo: v.atributo,
+          valor: v.valor,
+          skuVariante: `${form.sku}-${v.valor.toUpperCase().replace(/\s/g, '-')}`,
+          precioExtra: v.precioExtra,
+          stockAdicional: v.stockAdicional,
+        })) : undefined,
+      });
+      toast.success("Producto creado");
+      onSuccess();
     } catch (e: any) { toast.error(e.response?.data?.message || "Error"); }
     finally { setLoading(false); }
   };
 
   return (
     <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
+      {/* SKU + Nombre */}
       <div className="grid grid-cols-2 gap-3">
         <div><Label>SKU *</Label><Input value={form.sku} onChange={e => setForm({...form, sku: e.target.value})} placeholder="SHAMP-001" /></div>
         <div><Label>Nombre *</Label><Input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} /></div>
       </div>
+
+      {/* Categoría */}
       <div>
         <Label>Categoría</Label>
         <select value={form.categoriaId} onChange={e => setForm({...form, categoriaId: e.target.value})} className="w-full h-11 rounded-xl border-3 border-foreground bg-white px-4 font-bold text-sm">
@@ -292,23 +402,122 @@ function NuevoProductoForm({ onSuccess }: { onSuccess: () => void }) {
           {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </select>
       </div>
+
+      {/* Tipo: Tienda / Insumo */}
       <div className="grid grid-cols-2 gap-2">
         <label className={`flex items-center gap-2 p-3 rounded-xl border-3 cursor-pointer ${form.esTienda ? "border-primary bg-primary/10" : "border-foreground/30"}`}>
           <input type="checkbox" checked={form.esTienda} onChange={e => setForm({...form, esTienda: e.target.checked})} className="accent-primary" />
-          <div><p className="text-sm font-bold">Tienda</p><p className="text-[10px] text-foreground/50">Visible para clientes</p></div>
+          <div><p className="text-sm font-bold">Tienda</p></div>
         </label>
         <label className={`flex items-center gap-2 p-3 rounded-xl border-3 cursor-pointer ${form.esInsumo ? "border-accent bg-accent/10" : "border-foreground/30"}`}>
           <input type="checkbox" checked={form.esInsumo} onChange={e => setForm({...form, esInsumo: e.target.checked})} className="accent-accent" />
-          <div><p className="text-sm font-bold">Insumo</p><p className="text-[10px] text-foreground/50">Uso grooming</p></div>
+          <div><p className="text-sm font-bold">Insumo</p></div>
         </label>
       </div>
+
+      {/* Imagen + Descripción */}
       <div><Label>Imagen</Label><ImageUpload label="Subir imagen" onUpload={url => setForm({...form, imagenUrl: url})} /></div>
       <div><Label>Descripción</Label><textarea className="w-full min-h-[56px] rounded-xl border-3 border-foreground bg-white p-3 text-sm" value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} /></div>
-      <div><Label>Precio (Bs.) *</Label><Input type="number" min={0} step={0.5} value={form.precioBase} onChange={e => setForm({...form, precioBase: parseFloat(e.target.value) || 0})} /></div>
+
+      {/* Precios */}
       <div className="grid grid-cols-2 gap-3">
-        <div><Label className="text-xs">Stock Inicial</Label><Input type="number" min={0} value={form.stockInicial} onChange={e => setForm({...form, stockInicial: parseInt(e.target.value) || 0})} /></div>
-        <div><Label className="text-xs">Stock Mínimo</Label><Input type="number" min={0} value={form.stockMinimo} onChange={e => setForm({...form, stockMinimo: parseInt(e.target.value) || 0})} /></div>
+        <div>
+          <Label>Precio Base (Bs.) *</Label>
+          <Input type="number" min={0} step={0.5} value={form.precioBase} onChange={e => setForm({...form, precioBase: parseFloat(e.target.value) || 0})} />
+        </div>
+        <div>
+          <Label>Precio Promocional (Bs.)</Label>
+          <Input type="number" min={0} step={0.5} value={form.precioPromocional} onChange={e => setForm({...form, precioPromocional: parseFloat(e.target.value) || 0, enPromocion: true})} />
+        </div>
       </div>
+      {form.enPromocion && form.precioPromocional > 0 && (
+        <div className="bg-accent/10 border-2 border-accent rounded-xl p-2 text-xs text-center">
+          Precio promocional: Bs. {form.precioPromocional} (-{Math.round((1 - form.precioPromocional / form.precioBase) * 100)}%)
+        </div>
+      )}
+
+      {/* Stock */}
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label>Stock Inicial</Label><Input type="number" min={0} value={form.stockInicial} onChange={e => setForm({...form, stockInicial: parseInt(e.target.value) || 0})} /></div>
+        <div><Label>Stock Mínimo</Label><Input type="number" min={0} value={form.stockMinimo} onChange={e => setForm({...form, stockMinimo: parseInt(e.target.value) || 0})} /></div>
+      </div>
+
+      {/* 👇 VARIANTES */}
+      <div className="border-t-3 border-foreground pt-3">
+        <button
+          type="button"
+          onClick={() => setShowVariantes(!showVariantes)}
+          className="flex items-center gap-2 text-sm font-extrabold hover:text-primary transition-colors"
+        >
+          {showVariantes ? "▲" : "▼"} Variantes del producto ({variantes.length})
+        </button>
+        <p className="text-[10px] text-foreground/50 mt-0.5">Tamaños, colores, aromas, presentaciones...</p>
+
+        {showVariantes && (
+          <div className="mt-3 space-y-3">
+            {/* Lista de variantes agregadas */}
+            {variantes.length > 0 && (
+              <div className="space-y-2">
+                {variantes.map((v, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2 border-2 border-foreground rounded-xl text-xs">
+                    <span className="flex-1 font-bold">{v.atributo}: {v.valor}</span>
+                    <span>+Bs. {v.precioExtra}</span>
+                    <span>{v.stockAdicional}u</span>
+                    <Button size="sm" variant="destructive" onClick={() => removeVariante(i)}>✕</Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Form para agregar variante */}
+            <div className="bg-secondary/30 rounded-xl p-3 space-y-2">
+              <p className="text-xs font-bold">Nueva variante:</p>
+              <div className="grid grid-cols-4 gap-2">
+                <div>
+                  <Label className="text-[10px]">Atributo</Label>
+                  <Input
+                    placeholder="Tamaño"
+                    value={nuevaVariante.atributo}
+                    onChange={e => setNuevaVariante({...nuevaVariante, atributo: e.target.value})}
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px]">Valor</Label>
+                  <Input
+                    placeholder="1kg"
+                    value={nuevaVariante.valor}
+                    onChange={e => setNuevaVariante({...nuevaVariante, valor: e.target.value})}
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px]">+Precio</Label>
+                  <Input
+                    type="number"
+                    value={nuevaVariante.precioExtra}
+                    onChange={e => setNuevaVariante({...nuevaVariante, precioExtra: parseFloat(e.target.value) || 0})}
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px]">Stock</Label>
+                  <Input
+                    type="number"
+                    value={nuevaVariante.stockAdicional}
+                    onChange={e => setNuevaVariante({...nuevaVariante, stockAdicional: parseInt(e.target.value) || 0})}
+                    className="h-9 text-xs"
+                  />
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={addVariante} className="w-full mt-1">
+                + Agregar variante
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <DialogFooter>
         <Button onClick={handleSubmit} disabled={loading || (!form.esTienda && !form.esInsumo)} className="w-full">
           {loading ? "Creando..." : "Crear Producto"}
@@ -326,15 +535,54 @@ function EditarProductoForm({ producto, onSuccess }: { producto: Producto; onSuc
     nombre: producto.nombre,
     descripcion: producto.descripcion || "",
     precioBase: Number(producto.precioBase),
+    precioPromocional: Number(producto.precioPromocional) || 0,
+    enPromocion: producto.enPromocion ?? false,
     stockMinimo: producto.stockMinimo,
     imagenUrl: producto.imagenUrl || "",
     categoriaId: producto.categoria?.id ? String(producto.categoria.id) : "",
     esInsumo: producto.esInsumo ?? false,
     esTienda: producto.esTienda ?? true,
   });
+
   const [loading, setLoading] = useState(false);
   const [categorias, setCategorias] = useState<any[]>([]);
-  useEffect(() => { api.get("/inventory/categorias").then(({ data }) => setCategorias(data.data || [])).catch(() => {}); }, []);
+
+  // 👇 VARIANTES EXISTENTES
+  const [variantes, setVariantes] = useState<any[]>(producto.variantes || []);
+  const [nuevaVariante, setNuevaVariante] = useState({ atributo: "", valor: "", precioExtra: 0, stockAdicional: 10 });
+  const [showVariantes, setShowVariantes] = useState(false);
+
+  useEffect(() => {
+    api.get("/inventory/categorias").then(({ data }) => setCategorias(data.data || [])).catch(() => {});
+  }, []);
+
+  const addVariante = async () => {
+    if (!nuevaVariante.atributo || !nuevaVariante.valor) {
+      return toast.error("Ingresa atributo y valor");
+    }
+    try {
+      const { data } = await api.post("/inventory/variantes", {
+        productoId: producto.id,
+        atributo: nuevaVariante.atributo,
+        valor: nuevaVariante.valor,
+        skuVariante: `${producto.sku}-${nuevaVariante.valor.toUpperCase().replace(/\s/g, '-')}`,
+        precioExtra: nuevaVariante.precioExtra,
+        stockAdicional: nuevaVariante.stockAdicional,
+      });
+      setVariantes([...variantes, data.data]);
+      setNuevaVariante({ atributo: "", valor: "", precioExtra: 0, stockAdicional: 10 });
+      toast.success("Variante agregada");
+    } catch (e: any) { toast.error(e.response?.data?.message || "Error"); }
+  };
+
+  const removeVariante = async (varianteId: number) => {
+    try {
+      // Soft delete - poner stock en 0
+      await api.put(`/inventory/variantes/${varianteId}/stock`, { cantidad: 0, tipo: "ajuste" });
+      setVariantes(variantes.filter(v => v.id !== varianteId));
+      toast.success("Variante eliminada");
+    } catch { toast.error("Error al eliminar variante"); }
+  };
 
   const handleSubmit = async () => {
     if (!form.nombre.trim()) return toast.error("Nombre obligatorio");
@@ -344,14 +592,19 @@ function EditarProductoForm({ producto, onSuccess }: { producto: Producto; onSuc
         ...form,
         categoriaId: form.categoriaId ? parseInt(form.categoriaId) : null,
       });
-      toast.success("Producto actualizado"); onSuccess();
+      toast.success("Producto actualizado");
+      onSuccess();
     } catch (e: any) { toast.error(e.response?.data?.message || "Error"); }
     finally { setLoading(false); }
   };
 
   return (
     <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-2">
-      <div className="bg-secondary/30 rounded-xl px-3 py-2 text-xs font-mono text-foreground/50">SKU: {producto.sku} (no editable)</div>
+      <div className="bg-secondary/30 rounded-xl px-3 py-2 text-xs font-mono text-foreground/50">
+        SKU: {producto.sku} (no editable)
+      </div>
+
+      {/* Nombre + Categoría */}
       <div><Label>Nombre *</Label><Input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} /></div>
       <div>
         <Label>Categoría</Label>
@@ -360,12 +613,32 @@ function EditarProductoForm({ producto, onSuccess }: { producto: Producto; onSuc
           {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </select>
       </div>
+
+      {/* Descripción + Imagen */}
       <div><Label>Descripción</Label><textarea className="w-full min-h-[56px] rounded-xl border-3 border-foreground bg-white p-3 text-sm" value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} /></div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Precio (Bs.) *</Label><Input type="number" min={0} step={0.5} value={form.precioBase} onChange={e => setForm({...form, precioBase: parseFloat(e.target.value) || 0})} /></div>
-        <div><Label>Stock Mínimo</Label><Input type="number" min={0} value={form.stockMinimo} onChange={e => setForm({...form, stockMinimo: parseInt(e.target.value) || 0})} /></div>
-      </div>
       <div><Label>Imagen</Label><ImageUpload label="Cambiar imagen" currentImage={form.imagenUrl} onUpload={url => setForm({...form, imagenUrl: url})} /></div>
+
+      {/* Precios */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Precio Base (Bs.) *</Label>
+          <Input type="number" min={0} step={0.5} value={form.precioBase} onChange={e => setForm({...form, precioBase: parseFloat(e.target.value) || 0})} />
+        </div>
+        <div>
+          <Label>Precio Promocional (Bs.)</Label>
+          <Input type="number" min={0} step={0.5} value={form.precioPromocional} onChange={e => setForm({...form, precioPromocional: parseFloat(e.target.value) || 0, enPromocion: true})} />
+        </div>
+      </div>
+      {form.enPromocion && form.precioPromocional > 0 && (
+        <div className="bg-accent/10 border-2 border-accent rounded-xl p-2 text-xs text-center">
+          En promoción: Bs. {form.precioPromocional} (-{Math.round((1 - form.precioPromocional / form.precioBase) * 100)}%)
+        </div>
+      )}
+
+      {/* Stock */}
+      <div><Label>Stock Mínimo</Label><Input type="number" min={0} value={form.stockMinimo} onChange={e => setForm({...form, stockMinimo: parseInt(e.target.value) || 0})} /></div>
+
+      {/* Tipo */}
       <div className="grid grid-cols-2 gap-2">
         <label className={`flex items-center gap-2 p-3 rounded-xl border-3 cursor-pointer ${form.esTienda ? "border-primary bg-primary/10" : "border-foreground/30"}`}>
           <input type="checkbox" checked={form.esTienda} onChange={e => setForm({...form, esTienda: e.target.checked})} className="accent-primary" />
@@ -376,8 +649,67 @@ function EditarProductoForm({ producto, onSuccess }: { producto: Producto; onSuc
           <div><p className="text-sm font-bold">Insumo</p></div>
         </label>
       </div>
+
+      {/* 👇 VARIANTES */}
+      <div className="border-t-3 border-foreground pt-3">
+        <button
+          type="button"
+          onClick={() => setShowVariantes(!showVariantes)}
+          className="flex items-center gap-2 text-sm font-extrabold hover:text-primary transition-colors"
+        >
+          {showVariantes ? "▲" : "▼"} Variantes ({variantes.length})
+        </button>
+
+        {showVariantes && (
+          <div className="mt-3 space-y-3">
+            {/* Variantes existentes */}
+            {variantes.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold">Variantes actuales:</p>
+                {variantes.map((v, i) => (
+                  <div key={v.id || i} className="flex items-center gap-2 p-2 border-2 border-foreground rounded-xl text-xs">
+                    <span className="flex-1 font-bold">{v.atributo}: {v.valor}</span>
+                    <span>+Bs. {v.precioExtra || 0}</span>
+                    <span>{v.stockAdicional}u</span>
+                    <Button size="sm" variant="destructive" onClick={() => removeVariante(v.id)}>✕</Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Agregar nueva */}
+            <div className="bg-secondary/30 rounded-xl p-3 space-y-2">
+              <p className="text-xs font-bold">Agregar variante:</p>
+              <div className="grid grid-cols-4 gap-2">
+                <div>
+                  <Label className="text-[10px]">Atributo</Label>
+                  <Input placeholder="Tamaño" value={nuevaVariante.atributo} onChange={e => setNuevaVariante({...nuevaVariante, atributo: e.target.value})} className="h-9 text-xs" />
+                </div>
+                <div>
+                  <Label className="text-[10px]">Valor</Label>
+                  <Input placeholder="1kg" value={nuevaVariante.valor} onChange={e => setNuevaVariante({...nuevaVariante, valor: e.target.value})} className="h-9 text-xs" />
+                </div>
+                <div>
+                  <Label className="text-[10px]">+Precio</Label>
+                  <Input type="number" value={nuevaVariante.precioExtra} onChange={e => setNuevaVariante({...nuevaVariante, precioExtra: parseFloat(e.target.value) || 0})} className="h-9 text-xs" />
+                </div>
+                <div>
+                  <Label className="text-[10px]">Stock</Label>
+                  <Input type="number" value={nuevaVariante.stockAdicional} onChange={e => setNuevaVariante({...nuevaVariante, stockAdicional: parseInt(e.target.value) || 0})} className="h-9 text-xs" />
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={addVariante} className="w-full mt-1">
+                + Agregar variante
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <DialogFooter>
-        <Button onClick={handleSubmit} disabled={loading} className="w-full">{loading ? "Guardando..." : "Guardar cambios"}</Button>
+        <Button onClick={handleSubmit} disabled={loading} className="w-full">
+          {loading ? "Guardando..." : "Guardar cambios"}
+        </Button>
       </DialogFooter>
     </div>
   );

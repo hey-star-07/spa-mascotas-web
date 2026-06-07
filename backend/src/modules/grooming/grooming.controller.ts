@@ -13,13 +13,17 @@ export class GroomingController {
     } catch (error) { next(error); }
   }
 
-  // GET /api/grooming/my-fichas - Fichas activas del groomer autenticado
+  /**
+   * GET /api/grooming/my-fichas
+   * Obtiene TODAS las fichas del groomer autenticado
+   */
   static async getMyFichas(req: Request, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.userId;
       const groomer = await prisma.groomer.findUnique({ where: { usuarioId: userId } });
       if (!groomer) return res.status(200).json({ status: 'success', data: [] });
-      const fichas = await GroomingService.getFichasActivasGroomer(groomer.id);
+
+      const fichas = await GroomingService.getTodasLasFichasGroomer(groomer.id);
       res.status(200).json({ status: 'success', data: fichas });
     } catch (error) { next(error); }
   }

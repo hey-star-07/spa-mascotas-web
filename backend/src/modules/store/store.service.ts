@@ -5,8 +5,10 @@ import { CreatePedidoDTO } from './store.types';
 
 export class StoreService {
   // Obtener catálogo (productos activos con stock > 0)
+// Obtener catálogo (productos activos con stock > 0)
   static async getCatalogo(params?: { categoriaId?: number; search?: string }) {
-    const where: any = { activo: true };
+    const where: any = { activo: true, esTienda: true };
+    
     if (params?.categoriaId) where.categoriaId = params.categoriaId;
     if (params?.search) {
       where.OR = [
@@ -19,7 +21,7 @@ export class StoreService {
       where,
       include: {
         categoria: { select: { id: true, nombre: true } },
-        variantes: { where: { stockAdicional: { gt: 0 } } },
+        variantes: { select: { id: true, atributo: true, valor: true, stockAdicional: true, precioExtra: true } },
       },
       orderBy: { nombre: 'asc' },
     });
@@ -30,30 +32,38 @@ export class StoreService {
 
   // Agregar al carrito
   static async addToCart(usuarioId: number, data: { productoId: number; varianteId?: number; cantidad: number }) {
-    // Buscar o crear carrito activo
     let carrito = await prisma.carrito.findFirst({
       where: { usuarioId, expiresAt: { gt: new Date() } },
     });
 
     if (!carrito) {
       carrito = await prisma.carrito.create({
-        data: {
-          usuarioId,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        },
+        data: { usuarioId, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
       });
-    }
-
-    // Verificar stock
-    if (data.varianteId) {
-      const variante = await prisma.varianteProducto.findUnique({ where: { id: data.varianteId } });
-      if (!variante || variante.stockAdicional < data.cantidad) {
-        throw new AppError(ErrorCodes.VALIDATION_ERROR, 422, 'Stock insuficiente');
-      }
     }
 
     const producto = await prisma.producto.findUnique({ where: { id: data.productoId } });
     if (!producto) throw new AppError(ErrorCodes.USER_NOT_FOUND, 404, 'Producto no encontrado');
+
+    // 👇 USAR PRECIO PROMOCIONAL SI EXISTE
+    const precioBase = Number(producto.precioBase);
+    const precioPromo = producto.precioPromocional ? Number(producto.precioPromocional) : null;
+
+    const precioFinal = (producto.enPromocion && precioPromo) 
+      ? precioPromo
+      : precioBase;
+
+    // Si hay variante, sumar precio extra
+    let precioUnitario = precioFinal;
+    if (data.varianteId) {
+      const variante = await prisma.varianteProducto.findUnique({ where: { id: data.varianteId } });
+      if (variante) {
+        precioUnitario = precioFinal + Number(variante.precioExtra || 0);
+        if (variante.stockAdicional < data.cantidad) {
+          throw new AppError(ErrorCodes.VALIDATION_ERROR, 422, 'Stock insuficiente');
+        }
+      }
+    }
 
     // Verificar si ya existe en el carrito
     const existing = await prisma.detalleCarrito.findFirst({
@@ -73,7 +83,7 @@ export class StoreService {
         productoId: data.productoId,
         varianteId: data.varianteId || null,
         cantidad: data.cantidad,
-        precioUnitario: producto.precioBase,
+        precioUnitario: precioUnitario,  // 👈 Precio correcto
       },
     });
   }

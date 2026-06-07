@@ -17,5 +17,14 @@ router.get('/groomer/insumos', authenticate, authorize('Groomer'), ReportsContro
 
 // Cliente
 router.get('/cliente', authenticate, authorize('Cliente'), ReportsController.getReporteCliente);
+router.get('/cliente/puntos', authenticate, authorize('Cliente'), ReportsController.getPuntosCliente);
+
+// Encuestas
+router.post('/encuesta', authenticate, authorize('Cliente'), ReportsController.crearEncuesta);
+router.get('/encuestas', authenticate, authorize('Admin'), ReportsController.getEncuestas);
+
+// Recepción
+router.get('/cronograma-diario', authenticate, authorize('Admin', 'Recepcion'), ReportsController.getCronogramaDiario);
+router.get('/citas-canceladas', authenticate, authorize('Admin', 'Recepcion'), ReportsController.getCitasCanceladas);
 
 export default router;

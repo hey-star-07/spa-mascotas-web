@@ -64,5 +64,7 @@ router.post('/categorias', authenticate, authorize('Admin'), InventoryController
 // Alertas separadas por tipo
 router.get('/alertas/tienda', authenticate, authorize('Admin', 'Recepcion'), InventoryController.getAlertasTienda);
 router.get('/alertas/insumos', authenticate, authorize('Admin', 'Recepcion'), InventoryController.getAlertasInsumos);
+// Alertas de alto consumo
+router.get('/alertas/alto-consumo', authenticate, authorize('Admin', 'Recepcion'), InventoryController.getAlertasAltoConsumo);
 
 export default router;

@@ -29,6 +29,7 @@ export default function InsumosServicioPage() {
   const [productos, setProductos] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProducto, setSelectedProducto] = useState<any>(null);
+  const [selectedVarianteId, setSelectedVarianteId] = useState<number | null>(null);
   const [cantidad, setCantidad] = useState(1);
   const [saving, setSaving] = useState(false);
   const [servicioNombre, setServicioNombre] = useState("");
@@ -51,9 +52,13 @@ export default function InsumosServicioPage() {
 
   const addInsumo = () => {
     if (!selectedProducto) return;
-    
+
+    // Si el producto tiene variantes y no se seleccionó una, usar la primera
+    const varianteId = selectedVarianteId || selectedProducto.variantes?.[0]?.id || null;
+    const variante = selectedProducto.variantes?.find((v: any) => v.id === varianteId);
+
     const nuevo: InsumoConfig = {
-      id: -Date.now(), // ID temporal
+      id: -Date.now(),
       cantidadSugerida: cantidad,
       orden: insumos.length + 1,
       producto: {
@@ -62,15 +67,16 @@ export default function InsumosServicioPage() {
         sku: selectedProducto.sku,
         unidadMedida: selectedProducto.unidadMedida || 'unidad',
       },
-      variante: selectedProducto.variantes?.[0] ? {
-        id: selectedProducto.variantes[0].id,
-        atributo: selectedProducto.variantes[0].atributo,
-        valor: selectedProducto.variantes[0].valor,
+      variante: variante ? {
+        id: variante.id,
+        atributo: variante.atributo,
+        valor: variante.valor,
       } : null,
     };
 
     setInsumos([...insumos, nuevo]);
     setSelectedProducto(null);
+    setSelectedVarianteId(null);
     setCantidad(1);
     setSearchTerm("");
   };
@@ -91,7 +97,7 @@ export default function InsumosServicioPage() {
       await api.post(`/inventory/insumos-servicio/${params.id}`, {
         insumos: insumos.map(i => ({
           productoId: i.producto.id,
-          varianteId: i.variante?.id,
+          varianteId: i.variante?.id || null,
           cantidadSugerida: i.cantidadSugerida,
           orden: i.orden,
         })),
@@ -123,7 +129,7 @@ export default function InsumosServicioPage() {
             <div>
               <CardTitle>Insumos: {servicioNombre}</CardTitle>
               <CardDescription>
-                Configura los insumos que se asignarán automáticamente al crear una cita con este servicio.
+                Configura los insumos que se asignarán automáticamente al crear una cita.
               </CardDescription>
             </div>
           </div>
@@ -144,7 +150,13 @@ export default function InsumosServicioPage() {
                     <span className="text-xs font-bold text-foreground/40 w-5">{index + 1}.</span>
                     <div>
                       <p className="font-bold text-sm">{insumo.producto.nombre}</p>
-                      {insumo.variante && <p className="text-xs">{insumo.variante.valor}</p>}
+                      {insumo.variante ? (
+                        <Badge variant="outline" className="text-[10px]">
+                          {insumo.variante.atributo}: {insumo.variante.valor}
+                        </Badge>
+                      ) : (
+                        <span className="text-[10px] text-foreground/50">Sin variante específica</span>
+                      )}
                       <p className="text-xs text-foreground/50">SKU: {insumo.producto.sku}</p>
                     </div>
                   </div>
@@ -173,7 +185,7 @@ export default function InsumosServicioPage() {
           {/* Buscar y agregar insumo */}
           <div className="border-t-3 border-foreground pt-4 space-y-3">
             <p className="font-extrabold text-sm">Agregar insumo</p>
-            
+
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/50" />
               <Input
@@ -190,7 +202,11 @@ export default function InsumosServicioPage() {
                 {filteredProductos.map(p => (
                   <button
                     key={p.id}
-                    onClick={() => { setSelectedProducto(p); setSearchTerm(""); }}
+                    onClick={() => { 
+                      setSelectedProducto(p); 
+                      setSelectedVarianteId(p.variantes?.[0]?.id || null);
+                      setSearchTerm(""); 
+                    }}
                     className={`w-full text-left p-3 hover:bg-primary/10 transition-colors border-b border-foreground/10 last:border-b-0 ${
                       selectedProducto?.id === p.id ? 'bg-primary/20' : ''
                     }`}
@@ -198,8 +214,8 @@ export default function InsumosServicioPage() {
                     <p className="font-bold text-sm">{p.nombre}</p>
                     <p className="text-xs text-foreground/50">SKU: {p.sku} • {p.unidadMedida || 'unidad'}</p>
                     {p.variantes?.length > 0 && (
-                      <p className="text-[10px] text-foreground/40">
-                        Variantes: {p.variantes.map((v: any) => `${v.valor}(${v.stockAdicional})`).join(', ')}
+                      <p className="text-[10px] text-foreground/40 mt-0.5">
+                        {p.variantes.length} variante(s): {p.variantes.map((v: any) => `${v.valor}(${v.stockAdicional}u)`).join(', ')}
                       </p>
                     )}
                   </button>
@@ -209,29 +225,66 @@ export default function InsumosServicioPage() {
 
             {/* Producto seleccionado */}
             {selectedProducto && (
-              <div className="bg-primary/10 border-2 border-primary rounded-xl p-3">
+              <div className="bg-primary/10 border-2 border-primary rounded-xl p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-bold text-sm">{selectedProducto.nombre}</p>
                     <p className="text-xs">SKU: {selectedProducto.sku}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs">Cantidad:</Label>
-                    <Input
-                      type="number"
-                      value={cantidad}
-                      onChange={e => setCantidad(parseInt(e.target.value) || 1)}
-                      className="w-20 h-8 text-center"
-                      min="1"
-                    />
-                    <span className="text-xs">{selectedProducto.unidadMedida || 'uds'}</span>
-                  </div>
                 </div>
-                <div className="flex gap-2 mt-2">
+
+                {/* 👇 SELECTOR DE VARIANTE */}
+                {selectedProducto.variantes?.length > 0 && (
+                  <div>
+                    <Label className="text-xs">Variante:</Label>
+                    <select
+                      value={selectedVarianteId || ""}
+                      onChange={e => setSelectedVarianteId(e.target.value ? parseInt(e.target.value) : null)}
+                      className="w-full h-10 rounded-lg border-2 border-foreground bg-white px-3 text-xs font-bold"
+                    >
+                      <option value="">Sin variante (genérico)</option>
+                      {selectedProducto.variantes.map((v: any) => (
+                        <option key={v.id} value={v.id}>
+                          {v.atributo}: {v.valor} — Stock: {v.stockAdicional}u
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Cantidad */}
+                <div className="flex items-center gap-3">
+                  <Label className="text-xs">Cantidad:</Label>
+                  <Input
+                    type="number"
+                    value={cantidad}
+                    onChange={e => setCantidad(parseInt(e.target.value) || 1)}
+                    className="w-20 h-9 text-center text-sm"
+                    min="1"
+                  />
+                  <span className="text-xs text-foreground/50">{selectedProducto.unidadMedida || 'uds'}</span>
+                </div>
+
+                {/* Resumen de lo que se agregará */}
+                <div className="bg-white/50 rounded-lg p-2 text-xs">
+                  <p>
+                    Se agregará: <strong>{selectedProducto.nombre}</strong>
+                    {selectedVarianteId && selectedProducto.variantes && (
+                      <> — <Badge variant="outline" className="text-[10px]">
+                        {selectedProducto.variantes.find((v: any) => v.id === selectedVarianteId)?.valor}
+                      </Badge></>
+                    )}
+                    {' '}× {cantidad} {selectedProducto.unidadMedida || 'uds'}
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
                   <Button size="sm" variant="accent" onClick={addInsumo} className="flex-1">
                     <Plus className="mr-1 h-3 w-3" /> Agregar
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setSelectedProducto(null)}>Cancelar</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setSelectedProducto(null); setSelectedVarianteId(null); }}>
+                    Cancelar
+                  </Button>
                 </div>
               </div>
             )}

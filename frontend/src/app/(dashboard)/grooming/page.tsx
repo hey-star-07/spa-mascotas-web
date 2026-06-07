@@ -41,6 +41,13 @@ export default function GroomingListPage() {
   useEffect(() => {
     loadFichas();
   }, []);
+  
+  useEffect(() => {
+    api.get("/grooming/my-fichas")
+      .then(({ data }) => setFichas(data.data || []))
+      .catch(() => toast.error("Error al cargar fichas"))
+      .finally(() => setLoading(false));
+  }, []);
 
   const loadFichas = async () => {
     try {

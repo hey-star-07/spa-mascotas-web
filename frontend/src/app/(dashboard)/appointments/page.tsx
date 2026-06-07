@@ -465,32 +465,6 @@ export default function AppointmentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Diálogo Asignar Insumos */}
-      <Dialog open={insumosDialogOpen} onOpenChange={setInsumosDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5" /> Asignar Insumos al Groomer
-            </DialogTitle>
-          </DialogHeader>
-          {citaRecienCreada && (
-            <InsumosAsignacion
-              citaId={citaRecienCreada}
-              servicioId={parseInt(formData.servicioId)}
-              onSave={() => {
-                setInsumosDialogOpen(false);
-                toast.success("Insumos asignados correctamente");
-              }}
-            />
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setInsumosDialogOpen(false)}>
-              Omitir (asignar después)
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

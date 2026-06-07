@@ -6,11 +6,14 @@ export class StoreController {
   // GET /api/store/catalogo
   static async getCatalogo(req: Request, res: Response, next: NextFunction) {
     try {
-      const productos = await StoreService.getCatalogo(req.query as any);
+      const { categoriaId, search } = req.query;
+      const productos = await StoreService.getCatalogo({
+        categoriaId: categoriaId ? parseInt(categoriaId as string) : undefined,
+        search: search as string,
+      });
       res.status(200).json({ status: 'success', data: productos });
     } catch (error) { next(error); }
   }
-
   // GET /api/store/cart
   static async getCart(req: Request, res: Response, next: NextFunction) {
     try {

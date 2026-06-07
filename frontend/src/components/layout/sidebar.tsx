@@ -12,7 +12,7 @@ import { PawPrint } from "lucide-react";
 import { CalendarPlus, XCircle } from "lucide-react";
 import { Package } from "lucide-react";
 import { BarChart3 } from "lucide-react";
-import { AlertTriangle, Clock, FileText} from "lucide-react";
+import { AlertTriangle, Clock, FileText,TrendingUp } from "lucide-react";
 import { ClipboardList } from "lucide-react";
 import { Box } from "lucide-react";
 import { CreditCard } from "lucide-react";
@@ -43,12 +43,15 @@ const menuItems = [
   { href: "/grooming", label: "Fichas Técnicas", icon: ClipboardList, roles: ["Groomer"] },
   { href: "/inventory", label: "Inventario", icon: Box, roles: ["Admin", "Recepcion"] },
   { href: "/inventory/alerts", label: "Alertas", icon: AlertTriangle, roles: ["Admin", "Recepcion"] },
+  { href: "/inventory/alerts/alto-consumo", label: "Alto Consumo", icon: TrendingUp, roles: ["Admin", "Recepcion"] },
   { href: "/inventory/log", label: "Log de Insumos", icon: ScrollText, roles: ["Admin"] },
   { href: "/store", label: "Tienda", icon: ShoppingBag, roles: ["Cliente"] },
   { href: "/promotions", label: "Promociones", icon: Tag, roles: ["Admin"] },
   { href: "/billing", label: "Mis Recibos", icon: FileText, roles: ["Cliente"] },
   { href: "/billing", label: "Facturación/POS", icon: CreditCard, roles: ["Admin", "Recepcion"] },
-  { href: "/reports", label: "Reportes", icon: BarChart3, roles: ["Admin", "Recepcion"] },
+  { href: "/reports", label: "Reportes", icon: BarChart3, roles: ["Admin"] },
+  // Recepción
+  { href: "/reports/recepcion", label: "Reportes", icon: BarChart3, roles: ["Recepcion"] },
   // Groomer:
   { href: "/reports/groomer", label: "Mi Productividad", icon: BarChart3, roles: ["Groomer"] },
   // Cliente:
