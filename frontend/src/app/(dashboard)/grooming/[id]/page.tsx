@@ -83,12 +83,6 @@ export default function FichaTecnicaPage() {
   const [fotoTipo, setFotoTipo] = useState<"antes" | "despues">("antes");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Estados para INSUMOS
-  const [insumoProductoId, setInsumoProductoId] = useState("");
-  const [insumoCantidad, setInsumoCantidad] = useState("");
-  const [productos, setProductos] = useState<any[]>([]);
-  const [addingInsumo, setAddingInsumo] = useState(false);
-
   const [insumosAsignados, setInsumosAsignados] = useState<any[]>([]);
   const [todosConfirmados, setTodosConfirmados] = useState(false);
   const [todosConDestino, setTodosConDestino] = useState(false);
@@ -104,7 +98,6 @@ export default function FichaTecnicaPage() {
       setComportamiento(data.data.comportamiento || "");
       setRecomendaciones(data.data.recomendaciones || "");
       setNotasInternas(data.data.notasInternas || "");
-      setInsumosAsignados(data.data.consumoInsumos || []);
     } catch {
       toast.error("Error al cargar ficha");
       router.push("/groomer-dashboard");
@@ -120,22 +113,25 @@ export default function FichaTecnicaPage() {
       return;
     }
     loadFicha();
-    api.get("/inventory/productos").then(({ data }) => setProductos(data.data || []));
   }, [params.id]);
 
-  // Cargar insumos asignados
+  // Cargar insumos asignados DESDE la tabla insumo_asignados (predefinidos por admin)
   useEffect(() => {
     if (ficha?.citaId) {
-      // Cargar insumos asignados
+      // Cargar insumos asignados por el admin para esta cita
       api.get(`/inventory/insumos-asignados/${ficha.citaId}`)
-        .then(({ data }) => setInsumosAsignados(data.data || []));
+        .then(({ data }) => {
+          setInsumosAsignados(data.data || []);
+        })
+        .catch(() => setInsumosAsignados([]));
       
-      // Verificar estado
+      // Verificar estado de confirmación
       api.get(`/inventory/verificar-insumos/${ficha.citaId}`)
         .then(({ data }) => {
-          setTodosConfirmados(data.data.todosConfirmados);
-          setTodosConDestino(data.data.todosConDestino);
-        });
+          setTodosConfirmados(data.data?.todosConfirmados || false);
+          setTodosConDestino(data.data?.todosConDestino || false);
+        })
+        .catch(() => {});
     }
   }, [ficha?.citaId]);
 
@@ -244,39 +240,6 @@ export default function FichaTecnicaPage() {
     } catch { toast.error("Error"); }
   };
 
-  // ============================================
-  // INSUMOS
-  // ============================================
-  const addInsumo = async () => {
-    if (!insumoProductoId || !insumoCantidad) return toast.error("Selecciona producto y cantidad");
-    setAddingInsumo(true);
-    try {
-      await api.post("/grooming/insumos", {
-        fichaGroomingId: ficha?.id,
-        productoId: parseInt(insumoProductoId),
-        cantidad: parseFloat(insumoCantidad),
-      });
-      toast.success("Insumo registrado");
-      setInsumoProductoId("");
-      setInsumoCantidad("");
-      loadFicha();
-    } catch { toast.error("Error"); }
-    finally { setAddingInsumo(false); }
-  };
-
-  const toggleMerma = async (insumoId: number, currentMerma: boolean) => {
-    try {
-      await api.put(`/grooming/insumos/${insumoId}`, { merma: !currentMerma });
-      loadFicha();
-    } catch { toast.error("Error"); }
-  };
-
-  const toggleDevuelto = async (insumoId: number, currentDevuelto: boolean) => {
-    try {
-      await api.put(`/grooming/insumos/${insumoId}`, { devuelto: !currentDevuelto });
-      loadFicha();
-    } catch { toast.error("Error"); }
-  };
 
   const regenerarChecklist = async () => {
     try {

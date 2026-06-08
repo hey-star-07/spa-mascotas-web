@@ -253,4 +253,35 @@ export class UsersController {
       next(error);
     }
   }
+
+    /**
+   * GET /api/users/clientes
+   * Obtener lista de clientes activos (Admin, Recepción)
+   */
+  static async getClientes(req: Request, res: Response, next: NextFunction) {
+    try {
+      const clientes = await prisma.usuario.findMany({
+        where: { rol: 'Cliente', activo: true },
+        select: {
+          id: true,
+          email: true,
+          nombre: true,
+          apellido: true,
+          telefono: true,
+          cliente: {
+            select: {
+              id: true,
+              puntosFidelidad: true,
+            },
+          },
+        },
+        orderBy: { nombre: 'asc' },
+      });
+
+      res.status(200).json({
+        status: 'success',
+        data: { users: clientes },
+      });
+    } catch (error) { next(error); }
+  }
 }

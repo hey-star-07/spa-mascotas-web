@@ -180,14 +180,22 @@ export class ReportsController {
         },
         include: {
           mascota: {
-            select: { nombre: true, raza: true, imagen: true },
+            select: {
+              nombre: true,
+              raza: true,
+              imagen: true,
+              cliente: {                           
+                select: {
+                  usuario: {
+                    select: { nombre: true, apellido: true, telefono: true },
+                  },
+                },
+              },
+            },
           },
           servicio: { select: { nombre: true, precioBase: true } },
           groomer: { include: { usuario: { select: { nombre: true, apellido: true } } } },
           factura: { select: { estado: true, total: true, metodoPago: true } },
-          cliente: {
-            select: { usuario: { select: { nombre: true, apellido: true, telefono: true } } },
-          },
         },
         orderBy: { fechaHoraInicio: 'asc' },
       });

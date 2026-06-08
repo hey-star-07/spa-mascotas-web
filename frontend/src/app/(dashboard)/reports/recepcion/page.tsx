@@ -24,11 +24,17 @@ interface CitaDiaria {
   id: number;
   fechaHoraInicio: string;
   estado: string;
-  mascota: { nombre: string; raza: string | null; imagen: string | null };
+  mascota: { 
+    nombre: string; 
+    raza: string | null; 
+    imagen: string | null;
+    cliente?: {                                    // 👈 Cliente dentro de mascota
+      usuario: { nombre: string; apellido: string; telefono: string };
+    };
+  };
   servicio: { nombre: string; precioBase: number };
   groomer: { usuario: { nombre: string; apellido: string } } | null;
   factura: { estado: string; total: number; metodoPago: string | null } | null;
-  cliente?: { usuario: { nombre: string; apellido: string; telefono: string } };
 }
 
 interface CitaCancelada {
@@ -162,10 +168,10 @@ export default function RecepcionReportsPage() {
                         {c.groomer ? `${c.groomer.usuario.nombre}` : "—"}
                       </td>
                       <td className="py-2 px-2 text-xs">
-                        {c.cliente?.usuario?.nombre || "—"}
-                        {c.cliente?.usuario?.telefono && (
+                        {c.mascota?.cliente?.usuario?.nombre || "—"}
+                        {c.mascota?.cliente?.usuario?.telefono && (
                           <div className="flex items-center gap-1 text-[10px] text-foreground/50">
-                            <Phone className="h-3 w-3" /> {c.cliente.usuario.telefono}
+                            <Phone className="h-3 w-3" /> {c.mascota.cliente.usuario.telefono}
                           </div>
                         )}
                       </td>

@@ -101,7 +101,7 @@ export default function BillingPage() {
   const openPOS = async () => {
     try {
       const [clientesRes, serviciosRes, productosRes] = await Promise.all([
-        api.get("/users?rol=Cliente&activo=true"),
+        api.get("/users/clientes"),
         api.get("/services?active=true"),
         api.get("/inventory/catalogo-tienda"),
       ]);

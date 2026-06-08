@@ -33,7 +33,8 @@ router.get(
   UsersController.getUserStats
 );
 
-
+// Obtener clientes activos (Admin, Recepción)
+router.get('/clientes', authenticate, authorize('Admin', 'Recepcion'), UsersController.getClientes);
 // ============================================
 // RUTAS PROTEGIDAS (requieren autenticación)
 // ============================================

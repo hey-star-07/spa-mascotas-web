@@ -115,9 +115,13 @@ export class ReportsService {
   // ============================================
   static async getOcupacionGlobal(fecha?: string) {
     const fechaConsulta = fecha || new Date().toISOString().split('T')[0];
-    const inicio = new Date(fechaConsulta + 'T00:00:00');
-    const fin = new Date(fechaConsulta + 'T23:59:59');
+    const año = new Date(fechaConsulta).getFullYear();
+    
+    // Rango de todo el año
+    const inicioAño = new Date(`${año}-01-01T00:00:00`);
+    const finAño = new Date(`${año}-12-31T23:59:59`);
 
+    // Obtener todos los groomers activos
     const groomers = await prisma.groomer.findMany({
       where: { activo: true },
       include: {
@@ -126,57 +130,111 @@ export class ReportsService {
       },
     });
 
+    // Para cada groomer, contar sus citas del AÑO
     const porGroomer = await Promise.all(
       groomers.map(async (g) => {
-        const citas = await prisma.cita.count({
+        // Contar citas del AÑO para este groomer
+        const citasAño = await prisma.cita.count({
           where: {
             groomerId: g.id,
-            fechaHoraInicio: { gte: inicio, lte: fin },
+            fechaHoraInicio: { gte: inicioAño, lte: finAño },
             estado: { notIn: ['Cancelada', 'NoAsistio'] },
           },
         });
 
-        const horasDisponibles = g.disponibilidades
-          .filter(d => d.diaSemana === new Date(fechaConsulta).getDay())
-          .reduce((sum, d) => {
-            const [hi, mi] = d.horaInicio.split(':').map(Number);
-            const [hf, mf] = d.horaFin.split(':').map(Number);
-            return sum + (hf * 60 + mf - (hi * 60 + mi)) / 60;
-          }, 0);
+        // Contar citas completadas
+        const citasCompletadas = await prisma.cita.count({
+          where: {
+            groomerId: g.id,
+            fechaHoraInicio: { gte: inicioAño, lte: finAño },
+            estado: 'Completada',
+          },
+        });
 
-        const capacidadMaxima = g.capacidadDiaria || g.capacidadSimultanea * 3;
-        const porcentaje = capacidadMaxima > 0 ? (citas / capacidadMaxima) * 100 : 0;
+        // Capacidad diaria configurada
+        const capacidadDiaria = g.capacidadDiaria || 6;
+        
+        // Días laborales en el año (aproximado: 5 días/semana × 52 semanas = 260 días)
+        const diasLaboralesAño = 260;
+        const capacidadAnual = capacidadDiaria * diasLaboralesAño;
+
+        // Horas totales trabajadas en el año
+        const horasTrabajadas = await prisma.cita.aggregate({
+          where: {
+            groomerId: g.id,
+            fechaHoraInicio: { gte: inicioAño, lte: finAño },
+            estado: 'Completada',
+          },
+          _sum: { duracionRealMinutos: true },
+        });
+
+        const horasTotales = (horasTrabajadas._sum.duracionRealMinutos || 0) / 60;
+
+        // Porcentaje de ocupación anual
+        const porcentaje = capacidadAnual > 0 
+          ? Math.round((citasAño / capacidadAnual) * 100) 
+          : 0;
 
         return {
           groomer: `${g.usuario.nombre} ${g.usuario.apellido}`,
-          totalCitas: citas,
-          horasDisponibles,
-          capacidadMaxima,
-          porcentajeOcupacion: Math.round(porcentaje),
+          totalCitas: citasAño,
+          citasCompletadas,
+          horasTrabajadas: Math.round(horasTotales * 10) / 10,
+          capacidadAnual,
+          porcentajeOcupacion: Math.min(porcentaje, 100),
+          año,
         };
       })
     );
 
-    // Por día (últimos 7 días)
-    const porDia = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const fechaStr = d.toISOString().split('T')[0];
-      const diaInicio = new Date(fechaStr + 'T00:00:00');
-      const diaFin = new Date(fechaStr + 'T23:59:59');
+    // Citas por MES (últimos 12 meses)
+    const porMes = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(año, new Date().getMonth() - i, 1);
+      const mesInicio = new Date(d.getFullYear(), d.getMonth(), 1);
+      const mesFin = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
 
       const totalCitas = await prisma.cita.count({
         where: {
-          fechaHoraInicio: { gte: diaInicio, lte: diaFin },
+          fechaHoraInicio: { gte: mesInicio, lte: mesFin },
           estado: { notIn: ['Cancelada', 'NoAsistio'] },
         },
       });
 
-      porDia.push({ fecha: fechaStr, totalCitas, capacidadUsada: totalCitas });
+      const totalCompletadas = await prisma.cita.count({
+        where: {
+          fechaHoraInicio: { gte: mesInicio, lte: mesFin },
+          estado: 'Completada',
+        },
+      });
+
+      // Capacidad mensual (todos los groomers)
+      const capacidadMensual = groomers.reduce((sum, g) => {
+        return sum + ((g.capacidadDiaria || 6) * 22); // ~22 días hábiles por mes
+      }, 0);
+
+      porMes.push({
+        mes: d.toLocaleDateString('es-BO', { month: 'long', year: 'numeric' }),
+        mesAbrev: d.toLocaleDateString('es-BO', { month: 'short' }),
+        totalCitas,
+        totalCompletadas,
+        capacidadMensual,
+        porcentaje: capacidadMensual > 0 ? Math.round((totalCitas / capacidadMensual) * 100) : 0,
+      });
     }
 
-    return { porGroomer, porDia };
+    return {
+      porGroomer,
+      porMes,
+      año,
+      totalGroomers: groomers.length,
+      totalCitasAño: porGroomer.reduce((sum, g) => sum + g.totalCitas, 0),
+      totalCompletadasAño: porGroomer.reduce((sum, g) => sum + g.citasCompletadas, 0),
+      capacidadTotalAnual: porGroomer.reduce((sum, g) => sum + g.capacidadAnual, 0),
+      porcentajeGlobal: porGroomer.reduce((sum, g) => sum + g.capacidadAnual, 0) > 0
+        ? Math.round((porGroomer.reduce((sum, g) => sum + g.totalCitas, 0) / porGroomer.reduce((sum, g) => sum + g.capacidadAnual, 0)) * 100)
+        : 0,
+    };
   }
 
   // ============================================
@@ -239,7 +297,13 @@ export class ReportsService {
             servicio: { select: { nombre: true } },
           },
         },
-        fotos: { select: { id: true } },
+        fotos: {
+          select: {
+            id: true,
+            tipo: true,
+            urlFoto: true,  // 👈 URL REAL
+          },
+        },
         checklist: { select: { completado: true } },
       },
       orderBy: { fechaCierre: 'desc' },
@@ -255,7 +319,6 @@ export class ReportsService {
       ? Math.round(tiempos.reduce((a, b) => a + b, 0) / tiempos.length)
       : 0;
 
-    // Por día (últimos 30 días)
     const serviciosPorDia: Record<string, number> = {};
     for (const f of fichas) {
       if (!f.fechaCierre) continue;
@@ -267,13 +330,20 @@ export class ReportsService {
       totalServicios: fichas.length,
       tiempoPromedio,
       serviciosPorDia: Object.entries(serviciosPorDia).map(([fecha, cantidad]) => ({ fecha, cantidad })),
-      fichasRecientes: fichas.slice(0, 10).map(f => ({
+      fichasRecientes: fichas.slice(0, 20).map(f => ({
         id: f.id,
         fecha: f.fechaCierre?.toISOString() || '',
         mascota: f.cita.mascota.nombre,
         servicio: f.cita.servicio.nombre,
         fotos: f.fotos.length,
+        fotosUrls: f.fotos.map(foto => ({  // 👈 ARRAY DE FOTOS REALES
+          id: foto.id,
+          tipo: foto.tipo,
+          url: foto.urlFoto,
+        })),
         checklistCompletado: f.checklist.every(c => c.completado),
+        estadoIngreso: f.estadoIngreso || null,
+        recomendaciones: f.recomendaciones || null,
       })),
     };
   }

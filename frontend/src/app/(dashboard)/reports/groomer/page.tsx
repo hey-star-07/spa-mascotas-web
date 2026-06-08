@@ -26,6 +26,7 @@ interface FichaReciente {
   mascota: string;
   servicio: string;
   fotos: number;
+  fotosUrls?: Array<{ id: number; tipo: string; url: string }>;
   checklistCompletado: boolean;
   estadoIngreso?: string;
   recomendaciones?: string;
@@ -344,27 +345,26 @@ export default function GroomerReportsPage() {
 // GALERÍA DE FOTOS
 // ============================================
 function GaleriaFotos({ fichas }: { fichas: FichaReciente[] }) {
-  // Simular fotos desde las fichas (en producción vendrían del backend)
-  const fotosMock: FotoGaleria[] = fichas.flatMap((f, i) => {
-    const tipos = ['antes', 'despues'];
-    return Array.from({ length: Math.min(f.fotos, 2) }).map((_, j) => ({
-      id: i * 10 + j,
-      tipo: tipos[j] || 'antes',
-      urlFoto: `/uploads/pet-${(i % 5) + 1}.jpg`, // Placeholder
-      fecha: f.fecha,
-      mascota: f.mascota,
-      servicio: f.servicio,
-    }));
-  });
+  const [selectedFoto, setSelectedFoto] = useState<{ url: string; tipo: string; mascota?: string; fecha?: string } | null>(null);
 
-  const [selectedFoto, setSelectedFoto] = useState<FotoGaleria | null>(null);
+  // Extraer todas las fotos reales de las fichas
+  const todasLasFotos = fichas.flatMap(ficha => 
+    (ficha.fotosUrls || []).map(foto => ({
+      ...foto,
+      mascota: ficha.mascota,
+      fecha: ficha.fecha,
+      servicio: ficha.servicio,
+    }))
+  );
 
-  if (fotosMock.length === 0) {
+  if (todasLasFotos.length === 0) {
     return (
-      <div className="text-center py-6">
-        <ImageIcon className="h-12 w-12 text-foreground/30 mx-auto mb-2" />
-        <p className="text-sm text-foreground/50">No hay fotos registradas aún.</p>
-        <p className="text-xs text-foreground/40 mt-1">Las fotos de "antes y después" aparecerán aquí.</p>
+      <div className="text-center py-8">
+        <ImageIcon className="h-16 w-16 text-foreground/20 mx-auto mb-3" />
+        <p className="text-sm font-semibold text-foreground/50">No hay fotos registradas aún.</p>
+        <p className="text-xs text-foreground/40 mt-1">
+          Las fotos de "antes y después" que subas en las fichas técnicas aparecerán aquí.
+        </p>
       </div>
     );
   }
@@ -373,7 +373,7 @@ function GaleriaFotos({ fichas }: { fichas: FichaReciente[] }) {
     <div className="space-y-4">
       {/* Grid de fotos */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-        {fotosMock.map((foto) => (
+        {todasLasFotos.map((foto) => (
           <div
             key={foto.id}
             onClick={() => setSelectedFoto(foto)}
@@ -382,7 +382,7 @@ function GaleriaFotos({ fichas }: { fichas: FichaReciente[] }) {
             {/* Imagen */}
             <div className="aspect-square">
               <img
-                src={getImageUrl(foto.urlFoto) || '/paw-print.svg'}
+                src={getImageUrl(foto.url) || '/paw-print.svg'}
                 alt={`${foto.tipo} - ${foto.mascota}`}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 onError={(e) => {
@@ -399,7 +399,11 @@ function GaleriaFotos({ fichas }: { fichas: FichaReciente[] }) {
                 {foto.tipo === 'antes' ? 'Antes' : 'Después'}
               </Badge>
               <p className="text-[10px] font-bold mt-0.5 truncate">{foto.mascota}</p>
-              <p className="text-[8px] opacity-70 truncate">{foto.servicio}</p>
+              {foto.fecha && (
+                <p className="text-[8px] opacity-70">
+                  {format(parseISO(foto.fecha), "dd/MM/yy")}
+                </p>
+              )}
             </div>
 
             {/* Hover: lupa */}
@@ -418,12 +422,20 @@ function GaleriaFotos({ fichas }: { fichas: FichaReciente[] }) {
           className="fixed inset-0 z-50 bg-foreground/80 flex items-center justify-center p-4 cursor-pointer"
           onClick={() => setSelectedFoto(null)}
         >
-          <div className="max-w-2xl max-h-[90vh] bg-white rounded-2xl border-3 border-foreground shadow-cartoon overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div
+            className="max-w-2xl max-h-[90vh] bg-white rounded-2xl border-3 border-foreground shadow-cartoon overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="p-4">
               <img
-                src={getImageUrl(selectedFoto.urlFoto) || '/paw-print.svg'}
-                alt={`${selectedFoto.tipo} - ${selectedFoto.mascota}`}
+                src={getImageUrl(selectedFoto.url) || '/paw-print.svg'}
+                alt={selectedFoto.tipo}
                 className="max-h-[60vh] w-full object-contain rounded-xl"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.src = '/paw-print.svg';
+                  target.className = 'max-h-[60vh] w-full object-contain rounded-xl opacity-50';
+                }}
               />
             </div>
             <div className="p-4 border-t-3 border-foreground bg-secondary/30">
@@ -435,8 +447,11 @@ function GaleriaFotos({ fichas }: { fichas: FichaReciente[] }) {
                     </Badge>
                     <span className="font-extrabold">{selectedFoto.mascota}</span>
                   </div>
-                  <p className="text-sm mt-1">{selectedFoto.servicio}</p>
-                  <p className="text-xs text-foreground/50">{format(parseISO(selectedFoto.fecha), "dd/MM/yy")}</p>
+                  {selectedFoto.fecha && (
+                    <p className="text-xs text-foreground/50 mt-1">
+                      {format(parseISO(selectedFoto.fecha), "dd/MM/yy")}
+                    </p>
+                  )}
                 </div>
                 <Button variant="outline" size="sm" onClick={() => setSelectedFoto(null)}>Cerrar</Button>
               </div>

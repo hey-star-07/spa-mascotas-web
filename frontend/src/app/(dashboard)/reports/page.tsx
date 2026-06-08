@@ -161,32 +161,117 @@ export default function ReportsPage() {
       </SectionCard>
 
       {/* ============================================ */}
-      {/* OCUPACIÓN GLOBAL                               */}
+      {/* OCUPACIÓN GLOBAL (ANUAL)                       */}
       {/* ============================================ */}
       <SectionCard
-        title="Ocupación Global"
+        title={`Ocupación Global ${ocupacion?.año || ''}`}
         icon={<Users className="h-5 w-5" />}
         expanded={expandedSection === "ocupacion"}
         onToggle={() => setExpandedSection(expandedSection === "ocupacion" ? null : "ocupacion")}
       >
         {ocupacion && (
-          <div className="space-y-3">
-            {ocupacion.porGroomer?.map((g: any) => (
-              <div key={g.groomer} className="p-3 border-2 border-foreground rounded-xl">
-                <div className="flex justify-between mb-2">
-                  <span className="font-bold">{g.groomer}</span>
-                  <span className="text-sm">{g.totalCitas} citas • {g.porcentajeOcupacion}% ocupación</span>
-                </div>
-                <div className="h-4 bg-gray-100 rounded-full border border-foreground/20 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      g.porcentajeOcupacion > 80 ? 'bg-rose' : g.porcentajeOcupacion > 50 ? 'bg-accent' : 'bg-primary'
-                    }`}
-                    style={{ width: `${g.porcentajeOcupacion}%` }}
-                  />
+          <div className="space-y-4">
+            {/* KPIs del año */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-primary/10 rounded-xl p-3 text-center">
+                <p className="text-2xl font-extrabold">{ocupacion.totalCitasAño}</p>
+                <p className="text-[10px]">Citas totales</p>
+              </div>
+              <div className="bg-lavender/10 rounded-xl p-3 text-center">
+                <p className="text-2xl font-extrabold">{ocupacion.totalCompletadasAño}</p>
+                <p className="text-[10px]">Completadas</p>
+              </div>
+              <div className="bg-accent/10 rounded-xl p-3 text-center">
+                <p className="text-2xl font-extrabold">{ocupacion.capacidadTotalAnual}</p>
+                <p className="text-[10px]">Capacidad anual</p>
+              </div>
+              <div className="bg-rose/10 rounded-xl p-3 text-center">
+                <p className="text-2xl font-extrabold">{ocupacion.porcentajeGlobal}%</p>
+                <p className="text-[10px]">Ocupación global</p>
+              </div>
+            </div>
+
+            {/* Barra de ocupación global */}
+            <div className="bg-secondary/30 rounded-xl p-3">
+              <div className="flex justify-between text-xs mb-1">
+                <span>Ocupación anual global</span>
+                <span className="font-bold">{ocupacion.porcentajeGlobal}%</span>
+              </div>
+              <div className="h-6 bg-gray-100 rounded-full border border-foreground/20 overflow-hidden">
+                <div
+                  className={`h-full rounded-full flex items-center justify-center text-xs font-bold text-white transition-all ${
+                    ocupacion.porcentajeGlobal > 80 ? 'bg-rose' : 
+                    ocupacion.porcentajeGlobal > 50 ? 'bg-accent' : 'bg-primary'
+                  }`}
+                  style={{ width: `${ocupacion.porcentajeGlobal}%` }}
+                >
+                  {ocupacion.porcentajeGlobal > 15 && `${ocupacion.porcentajeGlobal}%`}
                 </div>
               </div>
-            ))}
+            </div>
+
+            {/* Por groomer */}
+            <p className="text-xs font-bold">Por Groomer:</p>
+            <div className="space-y-3">
+              {ocupacion.porGroomer?.map((g: any) => (
+                <div key={g.groomer} className="p-3 border-2 border-foreground rounded-xl">
+                  <div className="flex justify-between mb-2">
+                    <span className="font-bold text-sm">{g.groomer}</span>
+                    <div className="text-xs text-right">
+                      <span className="font-bold">{g.totalCitas} citas</span>
+                      <span className="text-foreground/50 ml-2">{g.citasCompletadas} completadas</span>
+                    </div>
+                  </div>
+                  <div className="h-5 bg-gray-100 rounded-full border border-foreground/20 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all flex items-center justify-end pr-2 ${
+                        g.porcentajeOcupacion > 80 ? 'bg-rose' : 
+                        g.porcentajeOcupacion > 50 ? 'bg-accent' : 'bg-primary'
+                      }`}
+                      style={{ width: `${g.porcentajeOcupacion}%` }}
+                    >
+                      {g.porcentajeOcupacion > 15 && (
+                        <span className="text-[10px] font-bold text-white">{g.porcentajeOcupacion}%</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-foreground/50 mt-1">
+                    <span>{g.totalCitas} de {g.capacidadAnual} citas/año</span>
+                    <span>{g.horasTrabajadas}h trabajadas</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Por mes (gráfico de barras) */}
+            <div>
+              <p className="text-xs font-bold mb-2">Citas por mes ({ocupacion.año}):</p>
+              <div className="space-y-1.5">
+                {ocupacion.porMes?.map((m: any) => {
+                  const maxCitas = Math.max(...ocupacion.porMes.map((x: any) => x.totalCitas), 1);
+                  const pct = (m.totalCitas / maxCitas) * 100;
+                  return (
+                    <div key={m.mes} className="flex items-center gap-2 text-xs">
+                      <span className="w-10 text-right font-bold">{m.mesAbrev}</span>
+                      <div className="flex-1 h-6 bg-gray-100 rounded-full border border-foreground/20 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full flex items-center justify-end pr-2 transition-all ${
+                            m.porcentaje > 80 ? 'bg-rose' : m.porcentaje > 50 ? 'bg-accent' : 'bg-primary'
+                          }`}
+                          style={{ width: `${pct}%` }}
+                        >
+                          {pct > 25 && (
+                            <span className="text-[10px] font-bold text-white">
+                              {m.totalCitas} citas ({m.porcentaje}%)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
       </SectionCard>
